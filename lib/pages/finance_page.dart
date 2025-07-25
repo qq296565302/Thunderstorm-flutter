@@ -22,12 +22,33 @@ class _FinancePageState extends State<FinancePage> {
   bool _isSocketConnected = false;
   StreamSubscription<Map<String, dynamic>>? _financeNewsSubscription;
   StreamSubscription<bool>? _connectionSubscription;
+  
+  // 滚动控制器
+  final ScrollController _scrollController = ScrollController();
+  bool _showBackToTopButton = false;
 
   @override
   void initState() {
     super.initState();
     _loadFinanceData();
     _setupSocketListeners();
+    _setupScrollListener();
+  }
+
+  /// 设置滚动监听器
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      // 当滚动位置超过200像素时显示返回顶部按钮
+      if (_scrollController.offset > 200 && !_showBackToTopButton) {
+        setState(() {
+          _showBackToTopButton = true;
+        });
+      } else if (_scrollController.offset <= 200 && _showBackToTopButton) {
+        setState(() {
+          _showBackToTopButton = false;
+        });
+      }
+    });
   }
 
   /// 设置Socket.IO监听器
@@ -59,12 +80,22 @@ class _FinancePageState extends State<FinancePage> {
         publishTime: newsData['publishTime'] ?? DateTime.now().toString().substring(0, 19),
       );
       
+      // 保存当前滚动位置
+      final currentScrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+      
       setState(() {
         // 将新消息添加到列表顶部
         _newsList.insert(0, newNews);
         // 限制列表长度，避免内存占用过多
         if (_newsList.length > 50) {
           _newsList = _newsList.take(50).toList();
+        }
+      });
+      
+      // 恢复滚动位置（延迟执行以确保ListView已重建）
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients && currentScrollOffset > 0) {
+          _scrollController.jumpTo(currentScrollOffset);
         }
       });
       
@@ -80,6 +111,17 @@ class _FinancePageState extends State<FinancePage> {
       }
     } catch (e) {
       print('处理实时财经新闻失败: $e');
+    }
+  }
+
+  /// 返回顶部
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -225,125 +267,149 @@ class _FinancePageState extends State<FinancePage> {
     // 清理Socket.IO相关资源
     _financeNewsSubscription?.cancel();
     _connectionSubscription?.cancel();
+    // 清理滚动控制器
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          // 头部标题
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.trending_up,
-                  size: 32,
-                  color: Colors.green,
+          Column(
+            children: [
+              // 头部标题
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.trending_up,
+                      size: 32,
+                      color: Colors.green,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      '财经资讯',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Socket.IO连接状态指示器
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _isSocketConnected ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _loadFinanceData,
+                      icon: const Icon(Icons.refresh),
+                      tooltip: '刷新',
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  '财经资讯',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Socket.IO连接状态指示器
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _isSocketConnected ? Colors.green : Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: _loadFinanceData,
-                  icon: const Icon(Icons.refresh),
-                  tooltip: '刷新',
-                ),
-              ],
-            ),
-          ),
-          // 内容区域
-          SizedBox(
-            height: MediaQuery.of(context).size.height - 250, // 限制内容区域高度，避免超出
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
-                : _errorMessage != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Colors.red,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              '加载失败',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _loadFinanceData,
-                              child: const Text('重试'),
-                            ),
-                          ],
-                        ),
+              ),
+              // 内容区域
+              SizedBox(
+                height: MediaQuery.of(context).size.height - 250, // 限制内容区域高度，避免超出
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(),
                       )
-                    : _newsList.isEmpty
-                        ? const Center(
+                    : _errorMessage != null
+                        ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  Icons.inbox,
+                                const Icon(
+                                  Icons.error_outline,
                                   size: 64,
-                                  color: Colors.grey,
+                                  color: Colors.red,
                                 ),
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Text(
-                                  '暂无数据',
-                                  style: TextStyle(
+                                  '加载失败',
+                                  style: const TextStyle(
                                     fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _errorMessage!,
+                                  style: const TextStyle(
+                                    fontSize: 14,
                                     color: Colors.grey,
                                   ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: _loadFinanceData,
+                                  child: const Text('重试'),
                                 ),
                               ],
                             ),
                           )
-                        : RefreshIndicator(
-                            onRefresh: _loadFinanceData,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.only(bottom: 20), // 减少底部间距
-                              itemCount: _newsList.length,
-                              itemBuilder: (context, index) {
-                                return _buildNewsCard(_newsList[index], index);
-                              },
-                            ),
-                          ),
+                        : _newsList.isEmpty
+                            ? const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.inbox,
+                                      size: 64,
+                                      color: Colors.grey,
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      '暂无数据',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : RefreshIndicator(
+                                onRefresh: _loadFinanceData,
+                                child: ListView.builder(
+                                  controller: _scrollController, // 添加滚动控制器
+                                  padding: const EdgeInsets.only(bottom: 20), // 减少底部间距
+                                  itemCount: _newsList.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildNewsCard(_newsList[index], index);
+                                  },
+                                ),
+                              ),
+              ),
+            ],
           ),
+          // 悬浮返回顶部按钮
+          if (_showBackToTopButton)
+            Positioned(
+              right: 16,
+              bottom: 100, // 距离底部100像素，避免与底部导航栏重叠
+              child: FloatingActionButton(
+                onPressed: _scrollToTop,
+                backgroundColor: Colors.white.withOpacity(0.8),
+                foregroundColor: Colors.black87,
+                elevation: 4,
+                mini: true, // 使用小尺寸
+                child: const Icon(
+                  Icons.keyboard_arrow_up,
+                  size: 24,
+                ),
+              ),
+            ),
         ],
       ),
     );
