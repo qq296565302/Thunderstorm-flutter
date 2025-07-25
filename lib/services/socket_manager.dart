@@ -82,6 +82,29 @@ class SocketManager {
     // 连接成功事件
     _socket!.onConnect((_) {
       _updateConnectionStatus(true);
+      // 连接成功后发送subscribeFinance消息
+      _socket!.emit('subscribeFinance');
+    });
+
+    // 监听financePush事件
+    _socket!.on('financePush', (data) {
+      try {
+        if (data is Map<String, dynamic>) {
+          // 检查数据结构并提取content字段
+          if (data.containsKey('content') && data['content'] is Map<String, dynamic>) {
+            // 提取财经新闻内容数据
+            Map<String, dynamic> financeContent = data['content'];
+            // 添加额外的元数据
+            financeContent['message'] = data['message'] ?? '';
+            financeContent['timestamp'] = data['timestamp'] ?? '';
+            financeContent['type'] = data['type'] ?? 'finance';
+            
+            _financeNewsController.add(financeContent);
+          } 
+        }
+      } catch (e) {
+        print('处理financePush事件时发生错误: $e');
+      }
     });
 
     // 连接断开事件
@@ -94,50 +117,6 @@ class SocketManager {
       _updateConnectionStatus(false);
     });
 
-    // 财经新闻更新事件
-    _socket!.on('finance_news_update', (data) {
-      if (data is Map<String, dynamic>) {
-        _financeNewsController.add(data);
-      } else {
-        _financeNewsController.add({'raw_data': data});
-      }
-    });
-
-    // 体育新闻更新事件
-    _socket!.on('sports_news_update', (data) {
-      if (data is Map<String, dynamic>) {
-        _sportsNewsController.add(data);
-      } else {
-        _sportsNewsController.add({'raw_data': data});
-      }
-    });
-
-    // 订阅确认事件
-    _socket!.on('subscribed', (data) {
-      _messageController.add({
-        'type': 'subscribed',
-        'data': data,
-        'timestamp': DateTime.now().toIso8601String()
-      });
-    });
-
-    // 取消订阅确认事件
-    _socket!.on('unsubscribed', (data) {
-      _messageController.add({
-        'type': 'unsubscribed',
-        'data': data,
-        'timestamp': DateTime.now().toIso8601String()
-      });
-    });
-
-    // 通用消息接收事件
-    _socket!.on('message_received', (data) {
-      _messageController.add({
-        'type': 'message_received',
-        'data': data,
-        'timestamp': DateTime.now().toIso8601String()
-      });
-    });
   }
 
   /// 更新连接状态
@@ -151,7 +130,6 @@ class SocketManager {
   void subscribe(String channel) {
     if (_socket != null && _isConnected) {
       _socket!.emit('subscribe', channel);
-      print('订阅频道: $channel');
     } else {
       print('Socket.IO未连接，无法订阅频道: $channel');
     }
