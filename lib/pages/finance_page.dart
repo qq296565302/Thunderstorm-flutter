@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/http_service.dart';
+import 'dart:async';
 import '../models/finance_model.dart';
+import '../services/http_service.dart';
+import '../services/socket_manager.dart';
 
 /// 财经页面
 class FinancePage extends StatefulWidget {
@@ -12,15 +14,73 @@ class FinancePage extends StatefulWidget {
 
 class _FinancePageState extends State<FinancePage> {
   final HttpService _httpService = HttpService();
+  final SocketManager _socketManager = SocketManager();
   List<FinanceNews> _newsList = [];
   bool _isLoading = true;
   String? _errorMessage;
   final Set<int> _expandedCards = <int>{}; // 记录展开的卡片索引
+  bool _isSocketConnected = false;
+  StreamSubscription<Map<String, dynamic>>? _financeNewsSubscription;
+  StreamSubscription<bool>? _connectionSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadFinanceData();
+    _setupSocketListeners();
+  }
+
+  /// 设置Socket.IO监听器
+  void _setupSocketListeners() {
+    // 监听连接状态变化
+    _connectionSubscription = _socketManager.connectionStream.listen((isConnected) {
+      if (mounted) {
+        setState(() {
+          _isSocketConnected = isConnected;
+        });
+      }
+    });
+    
+    // 监听财经新闻实时更新
+    _financeNewsSubscription = _socketManager.financeNewsStream.listen((newsData) {
+      if (mounted) {
+        _handleRealTimeFinanceNews(newsData);
+      }
+    });
+  }
+
+  /// 处理实时财经新闻数据
+  void _handleRealTimeFinanceNews(Map<String, dynamic> newsData) {
+    try {
+      // 将实时数据转换为FinanceNews对象
+      final newNews = FinanceNews(
+        content: newsData['content'] ?? '',
+        author: newsData['author'] ?? '实时推送',
+        publishTime: newsData['publishTime'] ?? DateTime.now().toString().substring(0, 19),
+      );
+      
+      setState(() {
+        // 将新消息添加到列表顶部
+        _newsList.insert(0, newNews);
+        // 限制列表长度，避免内存占用过多
+        if (_newsList.length > 50) {
+          _newsList = _newsList.take(50).toList();
+        }
+      });
+      
+      // 显示新消息提示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('收到新的财经资讯'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('处理实时财经新闻失败: $e');
+    }
   }
 
   /// 加载财经数据
@@ -161,6 +221,14 @@ class _FinancePageState extends State<FinancePage> {
   }
 
   @override
+  void dispose() {
+    // 清理Socket.IO相关资源
+    _financeNewsSubscription?.cancel();
+    _connectionSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
@@ -181,6 +249,16 @@ class _FinancePageState extends State<FinancePage> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Socket.IO连接状态指示器
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _isSocketConnected ? Colors.green : Colors.red,
+                    shape: BoxShape.circle,
                   ),
                 ),
                 const Spacer(),

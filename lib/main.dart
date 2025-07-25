@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'pages/finance_page.dart';
 import 'pages/sports_page.dart';
+import 'services/socket_manager.dart';
 
 void main() {
   runApp(const MyApp());
@@ -33,12 +35,96 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
+  final SocketManager _socketManager = SocketManager();
+  bool _isSocketConnected = false;
+  StreamSubscription<bool>? _connectionSubscription;
+  StreamSubscription<Map<String, dynamic>>? _messageSubscription;
 
   /// 页面列表
   final List<Widget> _pages = [
     const FinancePage(),
     const SportsPage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeSocket();
+  }
+
+  /// 初始化Socket.IO连接和监听
+  Future<void> _initializeSocket() async {
+    try {
+      // 监听连接状态变化
+      _connectionSubscription = _socketManager.connectionStream.listen((isConnected) {
+        if (mounted) {
+          setState(() {
+            _isSocketConnected = isConnected;
+          });
+          
+          if (isConnected) {
+            // 连接成功后自动订阅所有频道
+            _socketManager.subscribe('finance_news');
+            _socketManager.subscribe('sports_news');
+            
+            // 显示连接成功提示
+            _showConnectionStatus('Socket.IO连接成功', Colors.green);
+          } else {
+            // 显示连接断开提示
+            _showConnectionStatus('Socket.IO连接断开', Colors.red);
+          }
+        }
+      });
+      
+      // 监听通用消息
+      _messageSubscription = _socketManager.messageStream.listen((message) {
+        if (mounted) {
+          print('主页面收到消息: $message');
+        }
+      });
+      
+      // 连接到Socket.IO服务器
+      await _socketManager.connect('ws://localhost:3000');
+      
+    } catch (e) {
+      print('Socket.IO初始化失败: $e');
+      if (mounted) {
+        _showConnectionStatus('Socket.IO连接失败', Colors.red);
+      }
+    }
+  }
+
+  /// 显示连接状态提示
+  void _showConnectionStatus(String message, Color color) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                _isSocketConnected ? Icons.wifi : Icons.wifi_off,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(message),
+            ],
+          ),
+          backgroundColor: color,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    // 清理Socket.IO相关资源
+    _connectionSubscription?.cancel();
+    _messageSubscription?.cancel();
+    _socketManager.dispose();
+    super.dispose();
+  }
 
   /// 处理底部导航栏点击事件
   void _onItemTapped(int index) {
@@ -62,6 +148,7 @@ class _MainPageState extends State<MainPage> {
             child: CustomBottomNavBar(
               selectedIndex: _selectedIndex,
               onItemTapped: _onItemTapped,
+              isSocketConnected: _isSocketConnected,
             ),
           ),
         ],
@@ -74,11 +161,13 @@ class _MainPageState extends State<MainPage> {
 class CustomBottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onItemTapped;
+  final bool isSocketConnected;
 
   const CustomBottomNavBar({
     super.key,
     required this.selectedIndex,
     required this.onItemTapped,
+    required this.isSocketConnected,
   });
 
   @override
@@ -104,6 +193,39 @@ class CustomBottomNavBar extends StatelessWidget {
             icon: Icons.trending_up,
             label: '财经',
             isSelected: selectedIndex == 0,
+          ),
+          // Socket.IO连接状态指示器
+          Container(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: isSocketConnected ? Colors.green : Colors.red,
+                    shape: BoxShape.circle,
+                    boxShadow: isSocketConnected ? [
+                      BoxShadow(
+                        color: Colors.green.withAlpha(100),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ] : null,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isSocketConnected ? '在线' : '离线',
+                  style: TextStyle(
+                    color: isSocketConnected ? Colors.green : Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
           _buildNavItem(
             index: 1,
