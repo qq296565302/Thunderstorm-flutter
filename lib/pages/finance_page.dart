@@ -15,6 +15,7 @@ class _FinancePageState extends State<FinancePage> {
   List<FinanceNews> _newsList = [];
   bool _isLoading = true;
   String? _errorMessage;
+  final Set<int> _expandedCards = <int>{}; // 记录展开的卡片索引
 
   @override
   void initState() {
@@ -50,7 +51,10 @@ class _FinancePageState extends State<FinancePage> {
   }
 
   /// 构建新闻卡片
-  Widget _buildNewsCard(FinanceNews news) {
+  Widget _buildNewsCard(FinanceNews news, int index) {
+    final isExpanded = _expandedCards.contains(index);
+    final isLongContent = news.content.length > 100; // 判断内容是否过长
+    
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 4,
@@ -69,30 +73,38 @@ class _FinancePageState extends State<FinancePage> {
                 fontWeight: FontWeight.w500,
                 height: 1.4,
               ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+              maxLines: isExpanded ? null : 3,
+              overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
             ),
+            // 展开/收起按钮
+            if (isLongContent)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      if (isExpanded) {
+                        _expandedCards.remove(index);
+                      } else {
+                        _expandedCards.add(index);
+                      }
+                    });
+                  },
+                  child: Text(
+                    isExpanded ? '收起' : '展开全文',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.person,
-                      size: 16,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      news.author,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
-                ),
+                _buildAuthorTag(news.author),
                 Row(
                   children: [
                     const Icon(
@@ -113,6 +125,36 @@ class _FinancePageState extends State<FinancePage> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建作者标签
+  Widget _buildAuthorTag(String author) {
+    Color backgroundColor;
+    Color textColor = Colors.white;
+    
+    if (author.contains('财联社')) {
+      backgroundColor = Colors.red;
+    } else if (author.contains('新浪财经')) {
+      backgroundColor = Colors.blue;
+    } else {
+      backgroundColor = Colors.grey;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        author,
+        style: TextStyle(
+          fontSize: 12,
+          color: textColor,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -151,7 +193,8 @@ class _FinancePageState extends State<FinancePage> {
             ),
           ),
           // 内容区域
-          Expanded(
+          SizedBox(
+            height: MediaQuery.of(context).size.height - 250, // 限制内容区域高度，避免超出
             child: _isLoading
                 ? const Center(
                     child: CircularProgressIndicator(),
@@ -215,10 +258,10 @@ class _FinancePageState extends State<FinancePage> {
                         : RefreshIndicator(
                             onRefresh: _loadFinanceData,
                             child: ListView.builder(
-                              padding: const EdgeInsets.only(bottom: 100),
+                              padding: const EdgeInsets.only(bottom: 20), // 减少底部间距
                               itemCount: _newsList.length,
                               itemBuilder: (context, index) {
-                                return _buildNewsCard(_newsList[index]);
+                                return _buildNewsCard(_newsList[index], index);
                               },
                             ),
                           ),
