@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:logger/logger.dart';
 import 'pages/finance_page.dart';
 import 'pages/sports_page.dart';
 import 'services/socket_manager.dart';
@@ -36,9 +37,22 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
   final SocketManager _socketManager = SocketManager();
+  final Logger _logger = Logger(
+    printer: PrettyPrinter(
+      methodCount: 2,
+      errorMethodCount: 8,
+      lineLength: 120,
+      colors: true,
+      printEmojis: true,
+      dateTimeFormat: DateTimeFormat.none,
+    ),
+  );
   bool _isSocketConnected = false;
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
+  
+  /// 上次显示断开提示的时间戳，用于防抖
+  DateTime? _lastDisconnectNotificationTime;
 
   /// 页面列表
   final List<Widget> _pages = [
@@ -69,9 +83,17 @@ class _MainPageState extends State<MainPage> {
             
             // 显示连接成功提示
             _showConnectionStatus('Socket.IO连接成功', Colors.green);
+            
+            // 重置断开提示时间戳
+            _lastDisconnectNotificationTime = null;
           } else {
-            // 显示连接断开提示
-            _showConnectionStatus('Socket.IO连接断开', Colors.red);
+            // 防抖机制：只有距离上次断开提示超过5秒才显示新的断开提示
+            final now = DateTime.now();
+            if (_lastDisconnectNotificationTime == null || 
+                now.difference(_lastDisconnectNotificationTime!).inSeconds >= 5) {
+              _showConnectionStatus('Socket.IO连接断开', Colors.red);
+              _lastDisconnectNotificationTime = now;
+            }
           }
         }
       });
@@ -79,15 +101,15 @@ class _MainPageState extends State<MainPage> {
       // 监听通用消息
       _messageSubscription = _socketManager.messageStream.listen((message) {
         if (mounted) {
-          print('主页面收到消息: $message');
+          _logger.d('主页面收到消息: $message');
         }
       });
       
       // 连接到Socket.IO服务器
-      await _socketManager.connect('ws://localhost:3000');
+      await _socketManager.connect('ws://192.168.1.128:3000');
       
     } catch (e) {
-      print('Socket.IO初始化失败: $e');
+      _logger.e('Socket.IO初始化失败: $e');
       if (mounted) {
         _showConnectionStatus('Socket.IO连接失败', Colors.red);
       }
@@ -95,6 +117,8 @@ class _MainPageState extends State<MainPage> {
   }
 
   /// 显示连接状态提示
+  /// [message] 提示消息
+  /// [color] 提示颜色
   void _showConnectionStatus(String message, Color color) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

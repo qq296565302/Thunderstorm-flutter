@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:logger/logger.dart';
 import '../models/finance_model.dart';
 import '../services/http_service.dart';
 import '../services/socket_manager.dart';
@@ -15,6 +16,16 @@ class FinancePage extends StatefulWidget {
 class _FinancePageState extends State<FinancePage> {
   final HttpService _httpService = HttpService();
   final SocketManager _socketManager = SocketManager();
+  final Logger _logger = Logger(
+    printer: PrettyPrinter(
+      methodCount: 2,
+      errorMethodCount: 8,
+      lineLength: 120,
+      colors: true,
+      printEmojis: true,
+      dateTimeFormat: DateTimeFormat.none,
+    ),
+  );
   List<FinanceNews> _newsList = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -26,6 +37,10 @@ class _FinancePageState extends State<FinancePage> {
   // 滚动控制器
   final ScrollController _scrollController = ScrollController();
   bool _showBackToTopButton = false;
+  
+  // 新消息通知相关
+  List<FinanceNews> _pendingNewsList = []; // 存储待显示的新消息
+  int _newMessageCount = 0; // 新消息计数
 
   @override
   void initState() {
@@ -80,37 +95,44 @@ class _FinancePageState extends State<FinancePage> {
         publishTime: newsData['publishTime'] ?? DateTime.now().toString().substring(0, 19),
       );
       
-      // 保存当前滚动位置
-      final currentScrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-      
       setState(() {
-        // 将新消息添加到列表顶部
-        _newsList.insert(0, newNews);
-        // 限制列表长度，避免内存占用过多
-        if (_newsList.length > 50) {
-          _newsList = _newsList.take(50).toList();
+        // 将新消息添加到待显示列表
+        _pendingNewsList.insert(0, newNews);
+        // 增加新消息计数
+        _newMessageCount++;
+        // 限制待显示列表长度，避免内存占用过多
+        if (_pendingNewsList.length > 50) {
+          _pendingNewsList = _pendingNewsList.take(50).toList();
         }
       });
-      
-      // 恢复滚动位置（延迟执行以确保ListView已重建）
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients && currentScrollOffset > 0) {
-          _scrollController.jumpTo(currentScrollOffset);
-        }
-      });
-      
-      // 显示新消息提示
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('收到新的财经资讯'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     } catch (e) {
-      print('处理实时财经新闻失败: $e');
+      _logger.e('处理实时财经新闻失败: $e');
+    }
+  }
+  
+  /// 加载新消息到列表中
+  void _loadNewMessages() {
+    if (_pendingNewsList.isEmpty) return;
+    
+    setState(() {
+      // 将待显示的新消息添加到主列表顶部
+      _newsList.insertAll(0, _pendingNewsList);
+      // 限制主列表长度
+      if (_newsList.length > 100) {
+        _newsList = _newsList.take(100).toList();
+      }
+      // 清空待显示列表和计数
+      _pendingNewsList.clear();
+      _newMessageCount = 0;
+    });
+    
+    // 滚动到顶部显示新消息
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -316,9 +338,57 @@ class _FinancePageState extends State<FinancePage> {
                   ],
                 ),
               ),
+              // 新消息通知栏
+              if (_newMessageCount > 0)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: InkWell(
+                    onTap: _loadNewMessages,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.notifications_active,
+                          color: Colors.blue.shade600,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '接收到 $_newMessageCount 条新消息',
+                          style: TextStyle(
+                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '点击查看',
+                          style: TextStyle(
+                            color: Colors.blue.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.blue.shade600,
+                          size: 12,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (_newMessageCount > 0) const SizedBox(height: 16),
               // 内容区域
               SizedBox(
-                height: MediaQuery.of(context).size.height - 250, // 限制内容区域高度，避免超出
+                height: MediaQuery.of(context).size.height - (_newMessageCount > 0 ? 320 : 250), // 根据通知栏动态调整高度
                 child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(),

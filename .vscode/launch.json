@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "flutter_thunderstorm",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows",
+            "program": "lib/main.dart"
+        },
+        {
+            "name": "flutter_thunderstorm (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows",
+            "flutterMode": "profile",
+            "program": "lib/main.dart"
+        },
+        {
+            "name": "flutter_thunderstorm (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows",
+            "flutterMode": "release",
+            "program": "lib/main.dart"
+        }
+    ]
+}

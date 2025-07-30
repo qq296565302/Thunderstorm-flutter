@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:logger/logger.dart';
 import '../services/socket_manager.dart';
 
 /// 体育页面
@@ -12,6 +13,16 @@ class SportsPage extends StatefulWidget {
 
 class _SportsPageState extends State<SportsPage> {
   final SocketManager _socketManager = SocketManager();
+  final Logger _logger = Logger(
+    printer: PrettyPrinter(
+      methodCount: 2,
+      errorMethodCount: 8,
+      lineLength: 120,
+      colors: true,
+      printEmojis: true,
+      dateTimeFormat: DateTimeFormat.none,
+    ),
+  );
   List<Map<String, dynamic>> _sportsList = [];
   bool _isSocketConnected = false;
   StreamSubscription<Map<String, dynamic>>? _sportsNewsSubscription;
@@ -65,7 +76,7 @@ class _SportsPageState extends State<SportsPage> {
         );
       }
     } catch (e) {
-      print('处理实时体育新闻失败: $e');
+      _logger.e('处理实时体育新闻失败: $e');
     }
   }
 

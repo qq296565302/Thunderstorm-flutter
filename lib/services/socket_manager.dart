@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:logger/logger.dart';
 
 /// Socket.IO连接管理器
 /// 负责统一管理Socket.IO连接、事件监听和数据分发
@@ -7,6 +8,18 @@ class SocketManager {
   static final SocketManager _instance = SocketManager._internal();
   factory SocketManager() => _instance;
   SocketManager._internal();
+
+  // 日志记录器
+  final Logger _logger = Logger(
+    printer: PrettyPrinter(
+      methodCount: 2,
+      errorMethodCount: 8,
+      lineLength: 120,
+      colors: true,
+      printEmojis: true,
+      dateTimeFormat: DateTimeFormat.none,
+    ),
+  );
 
   IO.Socket? _socket;
   bool _isConnected = false;
@@ -103,7 +116,7 @@ class SocketManager {
           } 
         }
       } catch (e) {
-        print('处理financePush事件时发生错误: $e');
+        _logger.e('处理financePush事件时发生错误', error: e);
       }
     });
 
@@ -131,7 +144,7 @@ class SocketManager {
     if (_socket != null && _isConnected) {
       _socket!.emit('subscribe', channel);
     } else {
-      print('Socket.IO未连接，无法订阅频道: $channel');
+      _logger.w('Socket.IO未连接，无法订阅频道: $channel');
     }
   }
 
@@ -140,9 +153,9 @@ class SocketManager {
   void unsubscribe(String channel) {
     if (_socket != null && _isConnected) {
       _socket!.emit('unsubscribe', channel);
-      print('取消订阅频道: $channel');
+      _logger.i('取消订阅频道: $channel');
     } else {
-      print('Socket.IO未连接，无法取消订阅频道: $channel');
+      _logger.w('Socket.IO未连接，无法取消订阅频道: $channel');
     }
   }
 
@@ -152,9 +165,9 @@ class SocketManager {
   void sendMessage(String event, dynamic data) {
     if (_socket != null && _isConnected) {
       _socket!.emit(event, data);
-      print('发送消息 - 事件: $event, 数据: $data');
+      _logger.d('发送消息 - 事件: $event, 数据: $data');
     } else {
-      print('Socket.IO未连接，无法发送消息');
+      _logger.w('Socket.IO未连接，无法发送消息');
     }
   }
 
@@ -165,7 +178,7 @@ class SocketManager {
       _socket!.dispose();
       _socket = null;
       _updateConnectionStatus(false);
-      print('Socket.IO连接已断开');
+      _logger.i('Socket.IO连接已断开');
     }
   }
 
@@ -176,7 +189,7 @@ class SocketManager {
       await Future.delayed(const Duration(seconds: 1));
       await connect(_serverUrl!);
     } else {
-      print('无法重新连接：服务器地址为空');
+      _logger.e('无法重新连接：服务器地址为空');
     }
   }
 
@@ -187,7 +200,7 @@ class SocketManager {
     _financeNewsController.close();
     _sportsNewsController.close();
     _messageController.close();
-    print('SocketManager资源已释放');
+    _logger.i('SocketManager资源已释放');
   }
 
   /// 获取连接信息
