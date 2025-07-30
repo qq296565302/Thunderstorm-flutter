@@ -26,10 +26,12 @@ class SocketManager {
   String? _serverUrl;
   Timer? _reconnectTimer;
   Timer? _heartbeatTimer;
+  Timer? _connectionCheckTimer; // 连接状态检测定时器
   int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 10;
-  static const Duration _reconnectDelay = Duration(seconds: 5);
-  static const Duration _heartbeatInterval = Duration(seconds: 30);
+  static const int _maxReconnectAttempts = 50; // 增加重连次数
+  static const Duration _reconnectDelay = Duration(seconds: 1);
+  static const Duration _heartbeatInterval = Duration(seconds: 10); // 缩短心跳间隔
+  static const Duration _connectionCheckInterval = Duration(seconds: 5); // 连接检测间隔
   bool _shouldReconnect = true;
 
   // 连接状态流控制器
@@ -110,6 +112,8 @@ class SocketManager {
       _socket!.emit('subscribeFinance');
       // 启动心跳检测
       _startHeartbeat();
+      // 启动连接状态检测
+      _startConnectionCheck();
     });
 
     // 监听financePush事件
@@ -138,6 +142,7 @@ class SocketManager {
       _logger.w('Socket.IO连接断开，原因: $reason');
       _updateConnectionStatus(false);
       _stopHeartbeat();
+      _stopConnectionCheck();
       // 如果不是主动断开，则尝试重连
       if (_shouldReconnect && reason != 'io client disconnect') {
         _scheduleReconnect();
@@ -204,6 +209,7 @@ class SocketManager {
     _shouldReconnect = false; // 停止自动重连
     _stopReconnectTimer();
     _stopHeartbeat();
+    _stopConnectionCheck();
     if (_socket != null) {
       _socket!.disconnect();
       _socket!.dispose();
@@ -282,11 +288,42 @@ class SocketManager {
     _heartbeatTimer = null;
   }
 
+  /// 启动连接状态检测
+  void _startConnectionCheck() {
+    _stopConnectionCheck();
+    _connectionCheckTimer = Timer.periodic(_connectionCheckInterval, (timer) {
+      if (_socket != null) {
+        // 检查Socket实际连接状态
+        bool actuallyConnected = _socket!.connected;
+        if (_isConnected != actuallyConnected) {
+          _logger.w('检测到连接状态不一致，实际状态: $actuallyConnected，记录状态: $_isConnected');
+          _updateConnectionStatus(actuallyConnected);
+        }
+        
+        // 如果应该连接但实际未连接，尝试重连
+        if (_shouldReconnect && !actuallyConnected) {
+          _logger.w('检测到连接断开，尝试重连');
+          _scheduleReconnect();
+        }
+      } else if (_shouldReconnect) {
+        _logger.w('Socket对象为空，尝试重连');
+        _scheduleReconnect();
+      }
+    });
+  }
+
+  /// 停止连接状态检测
+  void _stopConnectionCheck() {
+    _connectionCheckTimer?.cancel();
+    _connectionCheckTimer = null;
+  }
+
   /// 释放资源
   void dispose() {
     disconnect();
     _stopReconnectTimer();
     _stopHeartbeat();
+    _stopConnectionCheck();
     _connectionController.close();
     _financeNewsController.close();
     _sportsNewsController.close();
