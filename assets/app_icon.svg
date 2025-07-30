@@ -1,0 +1,35 @@
+<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圆形 -->
+  <circle cx="96" cy="96" r="88" fill="#1E3A8A" stroke="#1E40AF" stroke-width="4"/>
+  
+  <!-- 云朵 -->
+  <ellipse cx="70" cy="60" rx="25" ry="15" fill="#E5E7EB"/>
+  <ellipse cx="90" cy="55" rx="20" ry="12" fill="#F3F4F6"/>
+  <ellipse cx="110" cy="60" rx="22" ry="14" fill="#E5E7EB"/>
+  
+  <!-- 闪电 -->
+  <path d="M85 70 L95 70 L90 85 L100 85 L85 110 L95 95 L85 95 Z" fill="#FCD34D" stroke="#F59E0B" stroke-width="2"/>
+  
+  <!-- 雨滴 -->
+  <ellipse cx="65" cy="90" rx="3" ry="8" fill="#3B82F6"/>
+  <ellipse cx="75" cy="100" rx="3" ry="8" fill="#60A5FA"/>
+  <ellipse cx="115" cy="95" rx="3" ry="8" fill="#3B82F6"/>
+  <ellipse cx="125" cy="105" rx="3" ry="8" fill="#60A5FA"/>
+  
+  <!-- 新闻纸图标 -->
+  <rect x="50" y="120" width="92" height="60" rx="4" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="2"/>
+  
+  <!-- 新闻标题线条 -->
+  <rect x="58" y="130" width="76" height="4" fill="#374151"/>
+  <rect x="58" y="140" width="60" height="3" fill="#6B7280"/>
+  <rect x="58" y="148" width="70" height="3" fill="#6B7280"/>
+  
+  <!-- 新闻内容线条 -->
+  <rect x="58" y="158" width="35" height="2" fill="#9CA3AF"/>
+  <rect x="58" y="163" width="40" height="2" fill="#9CA3AF"/>
+  <rect x="58" y="168" width="32" height="2" fill="#9CA3AF"/>
+  
+  <rect x="105" y="158" width="29" height="2" fill="#9CA3AF"/>
+  <rect x="105" y="163" width="25" height="2" fill="#9CA3AF"/>
+  <rect x="105" y="168" width="29" height="2" fill="#9CA3AF"/>
+</svg>

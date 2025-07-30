@@ -34,7 +34,7 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   final SocketManager _socketManager = SocketManager();
   final Logger _logger = Logger(
@@ -63,6 +63,7 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeSocket();
   }
 
@@ -143,11 +144,55 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // 清理Socket.IO相关资源
     _connectionSubscription?.cancel();
     _messageSubscription?.cancel();
     _socketManager.dispose();
     super.dispose();
+  }
+
+  /// 监听应用生命周期变化
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    _logger.d('应用生命周期状态变化: $state');
+    
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // 应用回到前台，确保Socket连接
+        _logger.i('应用回到前台，检查Socket连接状态');
+        if (!_isSocketConnected) {
+          _reconnectSocket();
+        }
+        break;
+      case AppLifecycleState.paused:
+        // 应用进入后台，保持连接但减少活动
+        _logger.i('应用进入后台，保持Socket连接');
+        break;
+      case AppLifecycleState.inactive:
+        // 应用处于非活动状态
+        _logger.i('应用处于非活动状态');
+        break;
+      case AppLifecycleState.detached:
+        // 应用即将被销毁
+        _logger.i('应用即将被销毁');
+        break;
+      case AppLifecycleState.hidden:
+        // 应用被隐藏
+        _logger.i('应用被隐藏');
+        break;
+    }
+  }
+
+  /// 重新连接Socket
+  Future<void> _reconnectSocket() async {
+    try {
+      _logger.i('尝试重新连接Socket.IO...');
+      await _socketManager.connect('ws://192.168.1.128:3000');
+    } catch (e) {
+      _logger.e('Socket.IO重连失败: $e');
+    }
   }
 
   /// 处理底部导航栏点击事件

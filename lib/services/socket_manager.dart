@@ -24,6 +24,13 @@ class SocketManager {
   IO.Socket? _socket;
   bool _isConnected = false;
   String? _serverUrl;
+  Timer? _reconnectTimer;
+  Timer? _heartbeatTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 10;
+  static const Duration _reconnectDelay = Duration(seconds: 5);
+  static const Duration _heartbeatInterval = Duration(seconds: 30);
+  bool _shouldReconnect = true;
 
   // 连接状态流控制器
   final StreamController<bool> _connectionController = StreamController<bool>.broadcast();
@@ -73,6 +80,8 @@ class SocketManager {
       _socket = IO.io(url, IO.OptionBuilder()
           .setTransports(['websocket'])
           .disableAutoConnect()
+          .setReconnectionAttempts(0) // 禁用内置重连，使用自定义重连
+          .setTimeout(20000) // 连接超时20秒
           .setExtraHeaders(options ?? {})
           .build());
 
@@ -94,9 +103,13 @@ class SocketManager {
 
     // 连接成功事件
     _socket!.onConnect((_) {
+      _logger.i('Socket.IO连接成功');
+      _reconnectAttempts = 0; // 重置重连计数
       _updateConnectionStatus(true);
       // 连接成功后发送subscribeFinance消息
       _socket!.emit('subscribeFinance');
+      // 启动心跳检测
+      _startHeartbeat();
     });
 
     // 监听financePush事件
@@ -121,13 +134,28 @@ class SocketManager {
     });
 
     // 连接断开事件
-    _socket!.onDisconnect((_) {
+    _socket!.onDisconnect((reason) {
+      _logger.w('Socket.IO连接断开，原因: $reason');
       _updateConnectionStatus(false);
+      _stopHeartbeat();
+      // 如果不是主动断开，则尝试重连
+      if (_shouldReconnect && reason != 'io client disconnect') {
+        _scheduleReconnect();
+      }
     });
 
     // 连接错误事件
     _socket!.onConnectError((error) {
+      _logger.e('Socket.IO连接错误: $error');
       _updateConnectionStatus(false);
+      if (_shouldReconnect) {
+        _scheduleReconnect();
+      }
+    });
+
+    // 监听心跳响应
+    _socket!.on('pong', (_) {
+      _logger.d('收到服务器心跳响应');
     });
 
   }
@@ -173,6 +201,9 @@ class SocketManager {
 
   /// 断开连接
   void disconnect() {
+    _shouldReconnect = false; // 停止自动重连
+    _stopReconnectTimer();
+    _stopHeartbeat();
     if (_socket != null) {
       _socket!.disconnect();
       _socket!.dispose();
@@ -185,7 +216,13 @@ class SocketManager {
   /// 重新连接
   Future<void> reconnect() async {
     if (_serverUrl != null) {
-      disconnect();
+      _shouldReconnect = true;
+      _stopReconnectTimer();
+      if (_socket != null) {
+        _socket!.disconnect();
+        _socket!.dispose();
+        _socket = null;
+      }
       await Future.delayed(const Duration(seconds: 1));
       await connect(_serverUrl!);
     } else {
@@ -193,9 +230,63 @@ class SocketManager {
     }
   }
 
+  /// 安排重连
+  void _scheduleReconnect() {
+    if (!_shouldReconnect || _reconnectAttempts >= _maxReconnectAttempts) {
+      if (_reconnectAttempts >= _maxReconnectAttempts) {
+        _logger.e('达到最大重连次数($_maxReconnectAttempts)，停止重连');
+      }
+      return;
+    }
+
+    _reconnectAttempts++;
+    final delay = Duration(seconds: _reconnectDelay.inSeconds * _reconnectAttempts);
+    _logger.i('第$_reconnectAttempts次重连将在${delay.inSeconds}秒后开始');
+
+    _stopReconnectTimer();
+    _reconnectTimer = Timer(delay, () async {
+      if (_shouldReconnect && _serverUrl != null) {
+        try {
+          _logger.i('开始第$_reconnectAttempts次重连尝试');
+          await connect(_serverUrl!);
+        } catch (e) {
+          _logger.e('重连失败: $e');
+          _scheduleReconnect(); // 继续尝试重连
+        }
+      }
+    });
+  }
+
+  /// 停止重连定时器
+  void _stopReconnectTimer() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
+
+  /// 启动心跳检测
+  void _startHeartbeat() {
+    _stopHeartbeat();
+    _heartbeatTimer = Timer.periodic(_heartbeatInterval, (timer) {
+      if (_socket != null && _isConnected) {
+        _socket!.emit('ping');
+        _logger.d('发送心跳包');
+      } else {
+        _stopHeartbeat();
+      }
+    });
+  }
+
+  /// 停止心跳检测
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
   /// 释放资源
   void dispose() {
     disconnect();
+    _stopReconnectTimer();
+    _stopHeartbeat();
     _connectionController.close();
     _financeNewsController.close();
     _sportsNewsController.close();
@@ -210,6 +301,14 @@ class SocketManager {
       'serverUrl': _serverUrl,
       'socketId': _socket?.id,
       'connected': _socket?.connected ?? false,
+      'reconnectAttempts': _reconnectAttempts,
+      'shouldReconnect': _shouldReconnect,
     };
+  }
+
+  /// 重置重连状态
+  void resetReconnectState() {
+    _reconnectAttempts = 0;
+    _shouldReconnect = true;
   }
 }
