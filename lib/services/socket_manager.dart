@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:logger/logger.dart';
 
 /// Socket.IO连接管理器
@@ -21,7 +21,7 @@ class SocketManager {
     ),
   );
 
-  IO.Socket? _socket;
+  io.Socket? _socket;
   bool _isConnected = false;
   String? _serverUrl;
   Timer? _reconnectTimer;
@@ -79,7 +79,7 @@ class SocketManager {
       _serverUrl = url;
       
       // 创建Socket.IO连接
-      _socket = IO.io(url, IO.OptionBuilder()
+      _socket = io.io(url, io.OptionBuilder()
           .setTransports(['websocket'])
           .disableAutoConnect()
           .setReconnectionAttempts(0) // 禁用内置重连，使用自定义重连

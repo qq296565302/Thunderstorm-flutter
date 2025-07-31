@@ -1,5 +1,5 @@
-import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'dart:async';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 
 /// Socket.IO服务类，用于管理WebSocket连接和事件处理
 class SocketService {
@@ -7,7 +7,7 @@ class SocketService {
   factory SocketService() => _instance;
   SocketService._internal();
 
-  IO.Socket? _socket;
+  io.Socket? _socket;
   bool _isConnected = false;
   
   // 事件流控制器
@@ -28,7 +28,7 @@ class SocketService {
   /// 连接到Socket.IO服务器
   Future<void> connect(String serverUrl) async {
     try {
-      _socket = IO.io(serverUrl, <String, dynamic>{
+      _socket = io.io(serverUrl, <String, dynamic>{
         'transports': ['websocket'],
         'autoConnect': false,
       });

@@ -471,7 +471,7 @@ class _FinancePageState extends State<FinancePage> {
               bottom: 120, // 距离底部120像素，避免与底部导航栏重叠
               child: FloatingActionButton(
                 onPressed: _scrollToTop,
-                backgroundColor: Colors.white.withOpacity(0.8),
+                backgroundColor: Colors.white.withValues(alpha: 0.8),
                 foregroundColor: Colors.black87,
                 elevation: 4,
                 mini: true, // 使用小尺寸
