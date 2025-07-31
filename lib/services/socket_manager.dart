@@ -275,7 +275,6 @@ class SocketManager {
     _heartbeatTimer = Timer.periodic(_heartbeatInterval, (timer) {
       if (_socket != null && _isConnected) {
         _socket!.emit('ping');
-        _logger.d('发送心跳包');
       } else {
         _stopHeartbeat();
       }

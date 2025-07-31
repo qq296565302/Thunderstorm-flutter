@@ -177,7 +177,8 @@ class _FinancePageState extends State<FinancePage> {
   /// 构建新闻卡片
   Widget _buildNewsCard(FinanceNews news, int index) {
     final isExpanded = _expandedCards.contains(index);
-    final isLongContent = news.content.length > 100; // 判断内容是否过长
+    // 使用更准确的方法判断内容是否需要展开按钮
+    final isLongContent = _isContentTooLong(news.content);
     
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -191,7 +192,7 @@ class _FinancePageState extends State<FinancePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              news.content,
+              news.content.trim(), // 格式化内容：去掉开头和结尾的空格符
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -467,7 +468,7 @@ class _FinancePageState extends State<FinancePage> {
           if (_showBackToTopButton)
             Positioned(
               right: 16,
-              bottom: 100, // 距离底部100像素，避免与底部导航栏重叠
+              bottom: 120, // 距离底部120像素，避免与底部导航栏重叠
               child: FloatingActionButton(
                 onPressed: _scrollToTop,
                 backgroundColor: Colors.white.withOpacity(0.8),
@@ -483,5 +484,57 @@ class _FinancePageState extends State<FinancePage> {
         ],
       ),
     );
+  }
+
+  /// 判断文本内容是否过长，需要展开按钮
+  /// 使用TextPainter来准确计算文本在指定约束下是否会超过3行
+  bool _isContentTooLong(String content) {
+    // 格式化内容：去掉开头和结尾的空格符
+    final String trimmedContent = content.trim();
+    
+    // 如果内容为空或过短，不需要展开按钮
+    if (trimmedContent.isEmpty || trimmedContent.length < 50) {
+      return false;
+    }
+    
+    final TextPainter textPainter = TextPainter(
+      text: TextSpan(
+        text: trimmedContent,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+        ),
+      ),
+      maxLines: 3,
+      textDirection: TextDirection.ltr,
+    );
+    
+    // 计算可用宽度（屏幕宽度减去卡片边距和内边距）
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double availableWidth = screenWidth - 32 - 32; // 16*2 margin + 16*2 padding
+    
+    textPainter.layout(maxWidth: availableWidth);
+    
+    // 创建一个无限行数的TextPainter来计算完整文本的行数
+    final TextPainter fullTextPainter = TextPainter(
+      text: TextSpan(
+        text: trimmedContent,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    
+    fullTextPainter.layout(maxWidth: availableWidth);
+    
+    // 计算实际需要的行数
+    final int actualLines = (fullTextPainter.height / fullTextPainter.preferredLineHeight).ceil();
+    
+    // 只有当实际行数大于3行时才显示展开按钮
+    return actualLines > 3;
   }
 }
