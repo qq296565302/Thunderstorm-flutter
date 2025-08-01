@@ -30,7 +30,6 @@ class _FinancePageState extends State<FinancePage> {
   bool _isLoading = true;
   String? _errorMessage;
   final Set<int> _expandedCards = <int>{}; // 记录展开的卡片索引
-  bool _isSocketConnected = false;
   StreamSubscription<Map<String, dynamic>>? _financeNewsSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   
@@ -41,6 +40,9 @@ class _FinancePageState extends State<FinancePage> {
   // 新消息通知相关
   List<FinanceNews> _pendingNewsList = []; // 存储待显示的新消息
   int _newMessageCount = 0; // 新消息计数
+  
+  // Socket连接状态
+  bool _isSocketConnected = false; // Socket.IO连接状态
 
   @override
   void initState() {
@@ -70,6 +72,8 @@ class _FinancePageState extends State<FinancePage> {
   void _setupSocketListeners() {
     // 监听连接状态变化
     _connectionSubscription = _socketManager.connectionStream.listen((isConnected) {
+      // Socket.IO连接状态调试输出
+      debugPrint('Socket.IO连接状态: ${isConnected ? "已连接" : "已断开"}');
       if (mounted) {
         setState(() {
           _isSocketConnected = isConnected;
@@ -302,45 +306,39 @@ class _FinancePageState extends State<FinancePage> {
         children: [
           Column(
             children: [
-              // 头部标题
+              // Socket连接状态指示器
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: _isSocketConnected ? Colors.green.shade100 : Colors.red.shade100,
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.trending_up,
-                      size: 32,
-                      color: Colors.green,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      '财经资讯',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Icon(
+                      _isSocketConnected ? Icons.wifi : Icons.wifi_off,
+                      size: 16,
+                      color: _isSocketConnected ? Colors.green : Colors.red,
                     ),
                     const SizedBox(width: 8),
-                    // Socket.IO连接状态指示器
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _isSocketConnected ? Colors.green : Colors.red,
-                        shape: BoxShape.circle,
+                    Text(
+                      'Socket.IO: ${_isSocketConnected ? "已连接" : "已断开"}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _isSocketConnected ? Colors.green.shade700 : Colors.red.shade700,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _loadFinanceData,
-                      icon: const Icon(Icons.refresh),
-                      tooltip: '刷新',
                     ),
                   ],
                 ),
               ),
               // 新消息通知栏
-              if (_newMessageCount > 0)
+              if (_newMessageCount > 0) ...[
+                // 调试输出：打印新消息计数
+                Builder(
+                  builder: (context) {
+                    debugPrint('当前新消息数量: $_newMessageCount');
+                    return const SizedBox.shrink();
+                  },
+                ),
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -386,11 +384,14 @@ class _FinancePageState extends State<FinancePage> {
                     ),
                   ),
                 ),
-              if (_newMessageCount > 0) const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
               // 内容区域
-              SizedBox(
-                height: MediaQuery.of(context).size.height - (_newMessageCount > 0 ? 320 : 250), // 根据通知栏动态调整高度
-                child: _isLoading
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), // 设置容器的padding
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height - (_newMessageCount > 0 ? 170 : 120), // 根据通知栏动态调整高度
+                  child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(),
                       )
@@ -454,13 +455,14 @@ class _FinancePageState extends State<FinancePage> {
                                 onRefresh: _loadFinanceData,
                                 child: ListView.builder(
                                   controller: _scrollController, // 添加滚动控制器
-                                  padding: const EdgeInsets.only(bottom: 20), // 减少底部间距
+                                  padding: const EdgeInsets.all(16), // 设置内容区域的padding值
                                   itemCount: _newsList.length,
                                   itemBuilder: (context, index) {
                                     return _buildNewsCard(_newsList[index], index);
                                   },
                                 ),
                               ),
+                ),
               ),
             ],
           ),

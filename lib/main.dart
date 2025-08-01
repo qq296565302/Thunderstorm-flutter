@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'pages/finance_page.dart';
 import 'pages/sports_page.dart';
+import 'services/socket_manager.dart';
 
 void main() {
   runApp(const MyApp());
@@ -43,6 +44,18 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
+    _initializeSocket();
+  }
+
+  /// 初始化Socket连接
+  void _initializeSocket() async {
+    try {
+      final socketManager = SocketManager();
+      await socketManager.connect('http://192.168.1.128:3000');
+    } catch (e) {
+      // 连接失败时的处理，使用debugPrint避免在生产环境中输出
+      debugPrint('Socket连接失败: $e');
+    }
   }
 
 
@@ -51,6 +64,9 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    // 断开Socket连接
+    final socketManager = SocketManager();
+    socketManager.disconnect();
     super.dispose();
   }
 

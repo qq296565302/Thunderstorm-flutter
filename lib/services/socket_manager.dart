@@ -120,6 +120,8 @@ class SocketManager {
     _socket!.on('financePush', (data) {
       try {
         if (data is Map<String, dynamic>) {
+          _logger.d('收到financePush数据: $data');
+          
           // 检查数据结构并提取content字段
           if (data.containsKey('content') && data['content'] is Map<String, dynamic>) {
             // 提取财经新闻内容数据
@@ -130,7 +132,10 @@ class SocketManager {
             financeContent['type'] = data['type'] ?? 'finance';
             
             _financeNewsController.add(financeContent);
-          } 
+          } else {
+            // 如果数据直接就是财经新闻内容，直接使用
+            _financeNewsController.add(data);
+          }
         }
       } catch (e) {
         _logger.e('处理financePush事件时发生错误', error: e);
