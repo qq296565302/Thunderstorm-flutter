@@ -288,10 +288,11 @@ class _FinancePageState extends State<FinancePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          Column(
-            children: [
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
               // Socket连接状态指示器
               Container(
                 width: double.infinity,
@@ -472,6 +473,7 @@ class _FinancePageState extends State<FinancePage> {
               ),
             ),
         ],
+        ),
       ),
     );
   }
