@@ -70,6 +70,9 @@ class _FinancePageState extends State<FinancePage> {
 
   /// 设置Socket.IO监听器
   void _setupSocketListeners() {
+    // 获取当前连接状态
+    _isSocketConnected = _socketManager.isConnected;
+    
     // 监听连接状态变化
     _connectionSubscription = _socketManager.connectionStream.listen((isConnected) {
       // Socket.IO连接状态调试输出
@@ -181,8 +184,6 @@ class _FinancePageState extends State<FinancePage> {
   /// 构建新闻卡片
   Widget _buildNewsCard(FinanceNews news, int index) {
     final isExpanded = _expandedCards.contains(index);
-    // 使用更准确的方法判断内容是否需要展开按钮
-    final isLongContent = _isContentTooLong(news.content);
     
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -195,40 +196,25 @@ class _FinancePageState extends State<FinancePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              news.content.trim(), // 格式化内容：去掉开头和结尾的空格符
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-              ),
-              maxLines: isExpanded ? null : 3,
-              overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-            ),
-            // 展开/收起按钮
-            if (isLongContent)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isExpanded) {
-                        _expandedCards.remove(index);
-                      } else {
-                        _expandedCards.add(index);
-                      }
-                    });
-                  },
-                  child: Text(
-                    isExpanded ? '收起' : '展开全文',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.blue,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (!isExpanded) {
+                    _expandedCards.add(index);
+                  }
+                });
+              },
+              child: Text(
+                news.content.trim(), // 格式化内容：去掉开头和结尾的空格符
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
                 ),
+                maxLines: isExpanded ? null : 3,
+                overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
               ),
+            ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -452,7 +438,9 @@ class _FinancePageState extends State<FinancePage> {
                                 ),
                               )
                             : RefreshIndicator(
-                                onRefresh: _loadFinanceData,
+                                onRefresh: () async {
+                                  _loadNewMessages();
+                                },
                                 child: ListView.builder(
                                   controller: _scrollController, // 添加滚动控制器
                                   padding: const EdgeInsets.all(16), // 设置内容区域的padding值
@@ -488,55 +476,5 @@ class _FinancePageState extends State<FinancePage> {
     );
   }
 
-  /// 判断文本内容是否过长，需要展开按钮
-  /// 使用TextPainter来准确计算文本在指定约束下是否会超过3行
-  bool _isContentTooLong(String content) {
-    // 格式化内容：去掉开头和结尾的空格符
-    final String trimmedContent = content.trim();
-    
-    // 如果内容为空或过短，不需要展开按钮
-    if (trimmedContent.isEmpty || trimmedContent.length < 50) {
-      return false;
-    }
-    
-    final TextPainter textPainter = TextPainter(
-      text: TextSpan(
-        text: trimmedContent,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          height: 1.4,
-        ),
-      ),
-      maxLines: 3,
-      textDirection: TextDirection.ltr,
-    );
-    
-    // 计算可用宽度（屏幕宽度减去卡片边距和内边距）
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double availableWidth = screenWidth - 32 - 32; // 16*2 margin + 16*2 padding
-    
-    textPainter.layout(maxWidth: availableWidth);
-    
-    // 创建一个无限行数的TextPainter来计算完整文本的行数
-    final TextPainter fullTextPainter = TextPainter(
-      text: TextSpan(
-        text: trimmedContent,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          height: 1.4,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    
-    fullTextPainter.layout(maxWidth: availableWidth);
-    
-    // 计算实际需要的行数
-    final int actualLines = (fullTextPainter.height / fullTextPainter.preferredLineHeight).ceil();
-    
-    // 只有当实际行数大于3行时才显示展开按钮
-    return actualLines > 3;
-  }
+
 }
