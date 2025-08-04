@@ -27,6 +27,26 @@ class FinanceNews {
       'author': author,
     };
   }
+
+  /// 获取新闻的唯一标识符
+  /// 使用内容、发布时间和作者的组合生成唯一标识
+  String get uniqueId {
+    return '${content.hashCode}_${publishTime.hashCode}_${author.hashCode}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is FinanceNews &&
+        other.content == content &&
+        other.publishTime == publishTime &&
+        other.author == author;
+  }
+
+  @override
+  int get hashCode {
+    return content.hashCode ^ publishTime.hashCode ^ author.hashCode;
+  }
 }
 
 /// 财经API响应数据模型

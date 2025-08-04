@@ -29,7 +29,7 @@ class _FinancePageState extends State<FinancePage> {
   List<FinanceNews> _newsList = [];
   bool _isLoading = true;
   String? _errorMessage;
-  final Set<int> _expandedCards = <int>{}; // 记录展开的卡片索引
+  final Set<String> _expandedCards = <String>{}; // 记录展开的卡片唯一标识符
   StreamSubscription<Map<String, dynamic>>? _financeNewsSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   
@@ -183,7 +183,7 @@ class _FinancePageState extends State<FinancePage> {
 
   /// 构建新闻卡片
   Widget _buildNewsCard(FinanceNews news, int index) {
-    final isExpanded = _expandedCards.contains(index);
+    final isExpanded = _expandedCards.contains(news.uniqueId);
     
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -200,7 +200,7 @@ class _FinancePageState extends State<FinancePage> {
               onTap: () {
                 setState(() {
                   if (!isExpanded) {
-                    _expandedCards.add(index);
+                    _expandedCards.add(news.uniqueId);
                   }
                 });
               },
