@@ -5,6 +5,17 @@ import '../models/finance_model.dart';
 import '../services/http_service.dart';
 import '../services/socket_manager.dart';
 
+/// 财经页面常量配置
+class _FinancePageConstants {
+  static const int maxPendingNews = 50;
+  static const int maxMainNewsList = 100;
+  static const int defaultPageSize = 20;
+  static const double scrollThreshold = 200.0;
+  static const double bottomButtonOffset = 120.0;
+  static const Duration scrollAnimationDuration = Duration(milliseconds: 500);
+  static const Duration newMessageAnimationDuration = Duration(milliseconds: 300);
+}
+
 /// 财经页面
 class FinancePage extends StatefulWidget {
   const FinancePage({super.key});
@@ -16,16 +27,22 @@ class FinancePage extends StatefulWidget {
 class _FinancePageState extends State<FinancePage> {
   final HttpService _httpService = HttpService();
   final SocketManager _socketManager = SocketManager();
-  final Logger _logger = Logger(
-    printer: PrettyPrinter(
-      methodCount: 2,
-      errorMethodCount: 8,
-      lineLength: 120,
-      colors: true,
-      printEmojis: true,
-      dateTimeFormat: DateTimeFormat.none,
-    ),
-  );
+  
+  /// 创建Logger实例
+  static Logger _createLogger() {
+    return Logger(
+      printer: PrettyPrinter(
+        methodCount: 2,
+        errorMethodCount: 8,
+        lineLength: 120,
+        colors: true,
+        printEmojis: true,
+        dateTimeFormat: DateTimeFormat.none,
+      ),
+    );
+  }
+  
+  final Logger _logger = _createLogger();
   List<FinanceNews> _newsList = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -54,18 +71,19 @@ class _FinancePageState extends State<FinancePage> {
 
   /// 设置滚动监听器
   void _setupScrollListener() {
-    _scrollController.addListener(() {
-      // 当滚动位置超过200像素时显示返回顶部按钮
-      if (_scrollController.offset > 200 && !_showBackToTopButton) {
-        setState(() {
-          _showBackToTopButton = true;
-        });
-      } else if (_scrollController.offset <= 200 && _showBackToTopButton) {
-        setState(() {
-          _showBackToTopButton = false;
-        });
-      }
-    });
+    _scrollController.addListener(_onScroll);
+  }
+  
+  /// 滚动事件处理
+  void _onScroll() {
+    if (!mounted) return;
+    
+    final shouldShow = _scrollController.offset > _FinancePageConstants.scrollThreshold;
+    if (shouldShow != _showBackToTopButton) {
+      setState(() {
+        _showBackToTopButton = shouldShow;
+      });
+    }
   }
 
   /// 设置Socket.IO监听器
@@ -94,12 +112,22 @@ class _FinancePageState extends State<FinancePage> {
 
   /// 处理实时财经新闻数据
   void _handleRealTimeFinanceNews(Map<String, dynamic> newsData) {
+    if (!mounted) return;
+    
     try {
+      // 验证必要字段
+      final content = newsData['content']?.toString();
+      if (content == null || content.trim().isEmpty) {
+        _logger.w('接收到空内容的新闻数据');
+        return;
+      }
+      
       // 将实时数据转换为FinanceNews对象
       final newNews = FinanceNews(
-        content: newsData['content'] ?? '',
-        author: newsData['author'] ?? '实时推送',
-        publishTime: newsData['publishTime'] ?? DateTime.now().toString().substring(0, 19),
+        content: content,
+        author: newsData['author']?.toString() ?? '实时推送',
+        publishTime: newsData['publishTime']?.toString() ?? 
+            DateTime.now().toString().substring(0, 19),
       );
       
       setState(() {
@@ -108,25 +136,27 @@ class _FinancePageState extends State<FinancePage> {
         // 增加新消息计数
         _newMessageCount++;
         // 限制待显示列表长度，避免内存占用过多
-        if (_pendingNewsList.length > 50) {
-          _pendingNewsList = _pendingNewsList.take(50).toList();
+        if (_pendingNewsList.length > _FinancePageConstants.maxPendingNews) {
+          _pendingNewsList = _pendingNewsList.take(_FinancePageConstants.maxPendingNews).toList();
         }
       });
-    } catch (e) {
-      _logger.e('处理实时财经新闻失败: $e');
+    } catch (e, stackTrace) {
+      _logger.e('处理实时财经新闻失败', error: e, stackTrace: stackTrace);
     }
   }
   
   /// 加载新消息到列表中
   void _loadNewMessages() {
-    if (_pendingNewsList.isEmpty) return;
+    if (_pendingNewsList.isEmpty || !mounted) return;
+    
+    final newMessagesCount = _pendingNewsList.length;
     
     setState(() {
       // 将待显示的新消息添加到主列表顶部
       _newsList.insertAll(0, _pendingNewsList);
       // 限制主列表长度
-      if (_newsList.length > 100) {
-        _newsList = _newsList.take(100).toList();
+      if (_newsList.length > _FinancePageConstants.maxMainNewsList) {
+        _newsList = _newsList.take(_FinancePageConstants.maxMainNewsList).toList();
       }
       // 清空待显示列表和计数
       _pendingNewsList.clear();
@@ -134,10 +164,18 @@ class _FinancePageState extends State<FinancePage> {
     });
     
     // 滚动到顶部显示新消息
+    _scrollToTopAnimated();
+    
+    // 记录日志
+    _logger.i('已加载 $newMessagesCount 条新消息到列表');
+  }
+  
+  /// 动画滚动到顶部
+  void _scrollToTopAnimated() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         0.0,
-        duration: const Duration(milliseconds: 300),
+        duration: _FinancePageConstants.newMessageAnimationDuration,
         curve: Curves.easeOut,
       );
     }
@@ -148,7 +186,7 @@ class _FinancePageState extends State<FinancePage> {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         0.0,
-        duration: const Duration(milliseconds: 500),
+        duration: _FinancePageConstants.scrollAnimationDuration,
         curve: Curves.easeInOut,
       );
     }
@@ -156,6 +194,8 @@ class _FinancePageState extends State<FinancePage> {
 
   /// 加载财经数据
   Future<void> _loadFinanceData() async {
+    if (!mounted) return;
+    
     try {
       setState(() {
         _isLoading = true;
@@ -164,21 +204,67 @@ class _FinancePageState extends State<FinancePage> {
 
       final response = await _httpService.get('/finance', params: {
         'page': 1,
-        'limit': 20,
+        'limit': _FinancePageConstants.defaultPageSize,
       });
 
+      if (!mounted) return;
+      
       final financeResponse = FinanceResponse.fromJson(response);
       
       setState(() {
         _newsList = financeResponse.data;
         _isLoading = false;
       });
-    } catch (e) {
+      
+      _logger.i('成功加载 ${financeResponse.data.length} 条财经新闻');
+    } catch (e, stackTrace) {
+      if (!mounted) return;
+      
+      _logger.e('加载财经数据失败', error: e, stackTrace: stackTrace);
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = _formatErrorMessage(e);
         _isLoading = false;
       });
     }
+  }
+  
+  /// 格式化错误信息
+  String _formatErrorMessage(dynamic error) {
+    if (error.toString().contains('SocketException')) {
+      return '网络连接失败，请检查网络设置';
+    } else if (error.toString().contains('TimeoutException')) {
+      return '请求超时，请稍后重试';
+    } else if (error.toString().contains('FormatException')) {
+      return '数据格式错误，请联系技术支持';
+    }
+    return '加载失败：${error.toString()}';
+  }
+
+  /// 构建Socket连接状态指示器
+  Widget _buildConnectionStatusIndicator() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: _isSocketConnected ? Colors.green.shade100 : Colors.red.shade100,
+      child: Row(
+        children: [
+          Icon(
+            _isSocketConnected ? Icons.wifi : Icons.wifi_off,
+            size: 16,
+            color: _isSocketConnected ? Colors.green : Colors.red,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Socket.IO: ${_isSocketConnected ? "已连接" : "已断开"}',
+            style: TextStyle(
+              fontSize: 12,
+              color: _isSocketConnected ? Colors.green.shade700 : Colors.red.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 构建新闻卡片
@@ -277,11 +363,15 @@ class _FinancePageState extends State<FinancePage> {
 
   @override
   void dispose() {
+    // 清理滚动监听器
+    _scrollController.removeListener(_onScroll);
     // 清理Socket.IO相关资源
     _financeNewsSubscription?.cancel();
     _connectionSubscription?.cancel();
     // 清理滚动控制器
     _scrollController.dispose();
+    
+    _logger.d('财经页面资源已清理');
     super.dispose();
   }
 
@@ -294,38 +384,9 @@ class _FinancePageState extends State<FinancePage> {
             Column(
               children: [
               // Socket连接状态指示器
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: _isSocketConnected ? Colors.green.shade100 : Colors.red.shade100,
-                child: Row(
-                  children: [
-                    Icon(
-                      _isSocketConnected ? Icons.wifi : Icons.wifi_off,
-                      size: 16,
-                      color: _isSocketConnected ? Colors.green : Colors.red,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Socket.IO: ${_isSocketConnected ? "已连接" : "已断开"}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _isSocketConnected ? Colors.green.shade700 : Colors.red.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildConnectionStatusIndicator(),
               // 新消息通知栏
               if (_newMessageCount > 0) ...[
-                // 调试输出：打印新消息计数
-                Builder(
-                  builder: (context) {
-                    debugPrint('当前新消息数量: $_newMessageCount');
-                    return const SizedBox.shrink();
-                  },
-                ),
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -459,7 +520,7 @@ class _FinancePageState extends State<FinancePage> {
           if (_showBackToTopButton)
             Positioned(
               right: 16,
-              bottom: 120, // 距离底部120像素，避免与底部导航栏重叠
+              bottom: _FinancePageConstants.bottomButtonOffset, // 距离底部像素，避免与底部导航栏重叠
               child: FloatingActionButton(
                 onPressed: _scrollToTop,
                 backgroundColor: Colors.white.withValues(alpha: 0.8),
