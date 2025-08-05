@@ -271,14 +271,10 @@ class _FinancePageState extends State<FinancePage> {
   Widget _buildNewsCard(FinanceNews news, int index) {
     final isExpanded = _expandedCards.contains(news.uniqueId);
     
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -301,7 +297,7 @@ class _FinancePageState extends State<FinancePage> {
                 overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -505,7 +501,7 @@ class _FinancePageState extends State<FinancePage> {
                                 },
                                 child: ListView.builder(
                                   controller: _scrollController, // 添加滚动控制器
-                                  padding: const EdgeInsets.all(16), // 设置内容区域的padding值
+                                  padding: const EdgeInsets.all(8), // 设置内容区域的padding值
                                   itemCount: _newsList.length,
                                   itemBuilder: (context, index) {
                                     return _buildNewsCard(_newsList[index], index);
