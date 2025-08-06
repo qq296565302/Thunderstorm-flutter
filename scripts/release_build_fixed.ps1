@@ -4,7 +4,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "================================" -ForegroundColor Cyan
-Write-Host "  Thunderstorm News Release Build" -ForegroundColor Cyan
+Write-Host "  Flutter Clinet Release Build" -ForegroundColor Cyan
 Write-Host "================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -76,6 +76,10 @@ try {
 }
 
 # Execute release build script
+# 设置控制台编码为UTF-8，防止中文乱码
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# 设置控制台代码页为UTF-8（65001）
+chcp 65001
 & dart "scripts\release_build.dart" $version_type
 
 if ($LASTEXITCODE -eq 0) {

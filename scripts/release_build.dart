@@ -7,35 +7,37 @@ import 'dart:convert';
 /// 集成版本号增加、清理、依赖获取和APK构建
 /// 使用方法：dart scripts/release_build.dart [patch|minor|major]
 void main(List<String> args) async {
+  // 强制设置输出编码为UTF-8，解决Windows下乱码问题
+  stdout.encoding = utf8;
   // 检测Flutter命令
   String flutterCommand = await _detectFlutterCommand();
   if (flutterCommand.isEmpty) {
-    print('错误: 找不到Flutter命令，请确保Flutter已安装并添加到PATH');
+    print('Error: Flutter command not found, please ensure Flutter is installed and added to PATH');
     exit(1);
   }
   print('================================');
-  print('    雷雨新闻客户端 发布构建');
+  print('    Flutter Clinet 发布构建');
   print('================================');
   print('');
   
   // 检查是否在项目根目录
   final pubspecFile = File('pubspec.yaml');
   if (!pubspecFile.existsSync()) {
-    print('错误: 找不到 pubspec.yaml 文件，请在Flutter项目根目录运行此脚本');
+    print('Error: pubspec.yaml file not found, please run this script in Flutter project root directory');
     exit(1);
   }
 
   // 确定版本号增加类型
   String versionType = args.isNotEmpty ? args[0].toLowerCase() : 'patch';
   if (!['patch', 'minor', 'major'].contains(versionType)) {
-    print('错误: 版本类型必须是 patch、minor 或 major');
-    print('使用方法: dart scripts/release_build.dart [patch|minor|major]');
+    print('Error: Version type must be patch, minor, or major');
+    print('Usage: dart scripts/release_build.dart [patch|minor|major]');
     exit(1);
   }
 
   try {
-    // 步骤1: 增加版本号
-    print('步骤 1/4: 增加版本号 ($versionType)...');
+    // Step 1: Increment version number
+    print('Step 1/4: Incrementing version number ($versionType)...');
     final versionResult = await Process.run(
       'dart', 
       ['scripts/increment_version.dart', versionType],
@@ -43,7 +45,7 @@ void main(List<String> args) async {
     );
     
     if (versionResult.exitCode != 0) {
-      print('错误: 版本号增加失败');
+      print('Error: Failed to increment version number');
       print(versionResult.stderr);
       exit(1);
     }
@@ -51,8 +53,8 @@ void main(List<String> args) async {
     print(versionResult.stdout);
     print('');
 
-    // 步骤2: 清理构建
-    print('步骤 2/4: 清理之前的构建...');
+    // Step 2: Clean build
+    print('Step 2/4: Cleaning previous build...');
     final cleanResult = await Process.run(
       flutterCommand, 
       ['clean'],
@@ -61,15 +63,15 @@ void main(List<String> args) async {
     );
     
     if (cleanResult.exitCode != 0) {
-      print('警告: 清理构建时出现问题');
+      print('Warning: Issue encountered during build cleanup');
       print(cleanResult.stderr);
     } else {
-      print('清理完成');
+      print('Cleanup completed');
     }
     print('');
 
-    // 步骤3: 获取依赖
-    print('步骤 3/4: 获取项目依赖...');
+    // Step 3: Get dependencies
+    print('Step 3/4: Getting project dependencies...');
     final pubGetResult = await Process.run(
       flutterCommand, 
       ['pub', 'get'],
@@ -78,17 +80,17 @@ void main(List<String> args) async {
     );
     
     if (pubGetResult.exitCode != 0) {
-      print('错误: 获取依赖失败');
+      print('Error: Failed to get dependencies');
       print(pubGetResult.stderr);
       exit(1);
     }
     
-    print('依赖获取完成');
+    print('Dependencies retrieved successfully');
     print('');
 
-    // 步骤4: 构建APK
-    print('步骤 4/4: 构建Release APK...');
-    print('这可能需要几分钟时间，请耐心等待...');
+    // Step 4: Build APK
+    print('Step 4/4: Building Release APK...');
+    print('This may take a few minutes, please be patient...');
     print('');
     
     final buildResult = await Process.run(
@@ -99,32 +101,32 @@ void main(List<String> args) async {
     );
     
     if (buildResult.exitCode != 0) {
-      print('错误: APK构建失败');
+      print('Error: APK build failed');
       print(buildResult.stderr);
       exit(1);
     }
     
-    // 构建成功
+    // Build successful
     print('');
     print('================================');
-    print('        构建成功完成!');
+    print('        Build completed successfully!');
     print('================================');
-    print('APK文件位置: build/app/outputs/flutter-apk/app-release.apk');
+    print('APK file location: build/app/outputs/flutter-apk/app-release.apk');
     
     // 获取APK文件信息
     final apkFile = File('build/app/outputs/flutter-apk/app-release.apk');
     if (apkFile.existsSync()) {
       final fileStat = await apkFile.stat();
       final fileSizeMB = (fileStat.size / (1024 * 1024)).toStringAsFixed(2);
-      print('APK文件大小: ${fileSizeMB} MB');
-      print('修改时间: ${fileStat.modified}');
+      print('APK file size: ${fileSizeMB} MB');
+      print('Modified time: ${fileStat.modified}');
     }
     
     print('');
-    print('发布构建完成！版本类型: $versionType');
+    print('Release build completed! Version type: $versionType');
     
   } catch (e) {
-    print('错误: 构建过程中发生异常');
+    print('Error: Exception occurred during build process');
     print(e.toString());
     exit(1);
   }

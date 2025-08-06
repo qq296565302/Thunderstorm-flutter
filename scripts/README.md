@@ -1,211 +1,321 @@
-# 构建脚本使用说明
+# 🚀 Flutter 自动化构建神器：告别手动打包的烦恼！
 
-## 版本号管理
+在 Flutter 开发中，频繁的打包、版本号管理和发布流程是不可避免的。为了简化这些重复性工作，我们创建了一套自动化构建脚本。这篇博文将详细介绍这些脚本的功能、使用方法以及它们背后的源码实现。
 
-### 为什么版本号不会自动变化？
+## 核心痛点：繁琐的手动构建流程
 
-Flutter项目的版本号定义在 `pubspec.yaml` 文件中：
+一个标准的 Flutter 发布流程通常包含以下步骤：
 
-```yaml
-version: 1.0.0+1
-```
+1.  **更新版本号**：手动修改 `pubspec.yaml` 文件中的版本号。
+2.  **清理项目**：运行 `flutter clean` 清除旧的构建缓存。
+3.  **获取依赖**：运行 `flutter pub get` 确保依赖最新。
+4.  **构建应用**：运行 `flutter build apk --release` 或其他打包命令。
+5.  **找到产物**：在 `build` 文件夹中找到生成的 APK 或其他产物。
 
-格式说明：`主版本号.次版本号.补丁版本号+构建号`
+这个过程不仅耗时，而且容易出错。我们的自动化脚本旨在解决这些问题。
 
-- **主版本号 (major)**: 重大功能更新或不兼容的API变更
-- **次版本号 (minor)**: 新功能添加，向后兼容
-- **补丁版本号 (patch)**: Bug修复，向后兼容
-- **构建号 (build)**: 每次构建的唯一标识
+## 脚本家族概览
 
-在Android中：
-- `versionName` 对应 `1.0.0` (前三个数字)
-- `versionCode` 对应 `1` (构建号)
+我们的脚本库包含以下几个核心文件：
 
-### 自动版本号管理解决方案
+-   `increment_version.dart`：独立的版本号递增工具。
+-   `release_build.dart`：核心发布构建逻辑，由PowerShell脚本调用。
+-   `release_build_fixed.ps1`：Windows PowerShell 封装脚本，提供交互式体验，解决了编码问题。
 
-我们提供了以下工具来自动管理版本号：
+## 一、智能版本号管理 (`increment_version.dart`)
 
-## 1. 版本号增加脚本
+这是所有自动化流程的基础。它允许你通过命令行参数快速增加版本号。
+
+### 功能
+
+-   支持 `major`、`minor`、`patch` 和 `build` 四种类型的版本号递增。
+-   自动读取、修改并写回 `pubspec.yaml` 文件。
+-   递增 `major`、`minor` 或 `patch` 时，会自动重置后续的版本号和构建号（例如，增加 `minor` 会将 `patch` 重置为 0，`build` 重置为 1）。
 
 ### 使用方法
 
 ```bash
-# 增加构建号 (默认，推荐日常使用)
-dart scripts/increment_version.dart
+# 增加构建号 (默认)
 dart scripts/increment_version.dart build
 
-# 增加补丁版本号 (修复bug时使用)
+# 增加补丁版本号
 dart scripts/increment_version.dart patch
 
-# 增加次版本号 (添加新功能时使用)
+# 增加次版本号
 dart scripts/increment_version.dart minor
 
-# 增加主版本号 (重大更新时使用)
+# 增加主版本号
 dart scripts/increment_version.dart major
 ```
 
-### 示例
+### 源码解析
+
+```dart:d:\KaKaRoot\Flutter_Thunderstorm\scripts\increment_version.dart
+#!/usr/bin/env dart
+
+import 'dart:io';
+import 'dart:convert';
+
+/// 自动增加Flutter项目版本号的脚本
+/// 使用方法：dart scripts/increment_version.dart [major|minor|patch|build]
+void main(List<String> args) async {
+  // 强制设置输出编码为UTF-8，解决Windows下乱码问题
+  stdout.encoding = utf8;
+  final pubspecFile = File('pubspec.yaml');
+  
+  if (!pubspecFile.existsSync()) {
+    print('Error: pubspec.yaml file not found');
+    exit(1);
+  }
+
+  // 读取pubspec.yaml内容
+  final content = await pubspecFile.readAsString();
+  final lines = content.split('\n');
+  
+  // 查找版本行
+  int versionLineIndex = -1;
+  String currentVersionLine = '';
+  
+  for (int i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('version:')) {
+      versionLineIndex = i;
+      currentVersionLine = lines[i];
+      break;
+    }
+  }
+  
+  if (versionLineIndex == -1) {
+    print('Error: Version information not found in pubspec.yaml');
+    exit(1);
+  }
+  
+  // 解析当前版本号
+  final versionMatch = RegExp(r'version:\s*(\d+)\.(\d+)\.(\d+)\+(\d+)').firstMatch(currentVersionLine);
+  
+  if (versionMatch == null) {
+    print('Error: Version format incorrect, should be major.minor.patch+build');
+    exit(1);
+  }
+  
+  int major = int.parse(versionMatch.group(1)!);
+  int minor = int.parse(versionMatch.group(2)!);
+  int patch = int.parse(versionMatch.group(3)!);
+  int build = int.parse(versionMatch.group(4)!);
+  
+  print('Current version: $major.$minor.$patch+$build');
+  
+  // 根据参数决定增加哪个版本号
+  String incrementType = args.isNotEmpty ? args[0].toLowerCase() : 'build';
+  
+  switch (incrementType) {
+    case 'major':
+      major++;
+      minor = 0;
+      patch = 0;
+      build = 1;
+      break;
+    case 'minor':
+      minor++;
+      patch = 0;
+      build = 1;
+      break;
+    case 'patch':
+      patch++;
+      build = 1;
+      break;
+    case 'build':
+    default:
+      build++;
+      break;
+  }
+  
+  final newVersion = '$major.$minor.$patch+$build';
+  print('New version: $newVersion');
+  
+  // 更新版本行
+  lines[versionLineIndex] = 'version: $newVersion';
+  
+  // 写回文件
+  await pubspecFile.writeAsString(lines.join('\n'));
+  
+  print('Version updated to: $newVersion');
+}
+```
+
+## 二、核心构建逻辑 (`release_build.dart`)
+
+这个 Dart 脚本是自动化构建的核心，它按顺序执行了完整的构建流程。
+
+### 功能
+
+1.  **调用版本号脚本**：根据传入的参数（`patch`, `minor`, `major`）调用 `increment_version.dart`。
+2.  **执行 Flutter 命令**：依次执行 `flutter clean`、`flutter pub get` 和 `flutter build apk --release`。
+3.  **错误处理**：在每一步都检查进程的退出码，如果失败则中止脚本并打印错误信息。
+4.  **结果输出**：构建成功后，打印 APK 的路径、大小和修改时间。
+5.  **跨平台兼容**：自动检测 `flutter` 或 `flutter.bat` 命令，增强在 Windows 上的兼容性。
+
+### 源码解析
+
+```dart:d:\KaKaRoot\Flutter_Thunderstorm\scripts\release_build.dart
+#!/usr/bin/env dart
+
+import 'dart:io';
+import 'dart:convert';
+
+/// 发布版本一键构建脚本
+/// 集成版本号增加、清理、依赖获取和APK构建
+/// 使用方法：dart scripts/release_build.dart [patch|minor|major]
+void main(List<String> args) async {
+  // 强制设置输出编码为UTF-8，解决Windows下乱码问题
+  stdout.encoding = utf8;
+  
+  // ... (检测Flutter命令的代码)
+
+  // ... (检查pubspec.yaml和参数的代码)
+
+  try {
+    // 步骤1: 增加版本号
+    print('Step 1/4: Incrementing version ($versionType)...');
+    final versionResult = await Process.run('dart', ['scripts/increment_version.dart', versionType]);
+    // ... (错误处理)
+
+    // 步骤2: 清理构建
+    print('Step 2/4: Cleaning previous build...');
+    final cleanResult = await Process.run(flutterCommand, ['clean'], runInShell: true);
+    // ... (错误处理)
+
+    // 步骤3: 获取依赖
+    print('Step 3/4: Getting project dependencies...');
+    final pubGetResult = await Process.run(flutterCommand, ['pub', 'get'], runInShell: true);
+    // ... (错误处理)
+
+    // 步骤4: 构建APK
+    print('Step 4/4: Building Release APK...');
+    final buildResult = await Process.run(flutterCommand, ['build', 'apk', '--release'], runInShell: true);
+    // ... (错误处理)
+    
+    // 构建成功
+    print('Build completed successfully!');
+    // ... (显示APK信息)
+    
+  } catch (e) {
+    print('Error: Exception occurred during build process');
+    print(e.toString());
+    exit(1);
+  }
+}
+
+// ... (_detectFlutterCommand 函数的实现)
+```
+
+## 三、用户交互层：PowerShell 脚本
+
+为了让非技术人员也能方便地使用，我们提供了 PowerShell 封装脚本。
+
+### `release_build_fixed.ps1` (PowerShell)
+
+这是我们的主要构建脚本，通过设置编码解决了 Windows 控制台中常见的中文乱码问题。
+
+#### 功能
+
+-   提供交互式菜单，让用户选择 `patch`、`minor` 或 `major`。
+-   调用 `release_build.dart` 并传入用户的选择。
+-   构建完成后自动打开 APK 所在的文件夹。
+-   在执行前会检查 `flutter` 和 `dart` 命令是否存在，提供更友好的错误提示。
+-   通过设置UTF-8编码解决了中文乱码问题。
+
+#### 源码解析
+
+```powershell:d:\KaKaRoot\Flutter_Thunderstorm\scripts\release_build_fixed.ps1
+# 设置控制台编码为 UTF-8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# ... (标题和路径检查)
+
+# 显示版本类型选择
+Write-Host "Please select release version type:" -ForegroundColor Yellow
+# ... (其他选项)
+$choice = Read-Host "Please select (1-3, default 1)"
+
+# ... (根据选择设置 $version_type 变量)
+
+# 执行发布构建脚本
+& dart "scripts\release_build.dart" $version_type
+
+if ($LASTEXITCODE -eq 0) {
+    # ... (成功信息)
+    Write-Host "Opening APK folder..." -ForegroundColor Cyan
+    Start-Process "explorer" "build\app\outputs\flutter-apk"
+} else {
+    Write-Host "Release build failed!" -ForegroundColor Red
+}
+```
+
+## 四、直接使用 Dart 脚本
+
+除了使用 PowerShell 脚本，你也可以直接调用 Dart 脚本进行构建。
+
+### 使用方法
 
 ```bash
-# 当前版本: 1.0.0+1
-dart scripts/increment_version.dart build
-# 新版本: 1.0.0+2
-
-dart scripts/increment_version.dart patch
-# 新版本: 1.0.1+1
-
-dart scripts/increment_version.dart minor
-# 新版本: 1.1.0+1
-
-dart scripts/increment_version.dart major
-# 新版本: 2.0.0+1
-```
-
-## 2. 一键构建脚本
-
-### Windows批处理版本
-
-双击运行 `scripts/build_apk.bat` 或在命令行中执行：
-
-```cmd
-scripts\build_apk.bat
-```
-
-### PowerShell版本
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build_apk.ps1
-```
-
-### 脚本功能
-
-1. **自动版本号管理**: 构建前可选择增加版本号
-2. **清理构建**: 自动执行 `flutter clean`
-3. **依赖更新**: 自动执行 `flutter pub get`
-4. **APK构建**: 执行 `flutter build apk --release`
-5. **结果展示**: 显示构建结果和APK文件位置
-6. **文件夹打开**: 可选择自动打开APK文件夹
-
-## 3. 一键发布构建脚本
-
-### 新增功能：集成发布构建命令
-
-我们新增了一键发布构建脚本，将多个步骤集成为一个命令：
-
-#### 使用方法
-
-```bash
-# 方法1: 使用批处理脚本（可能出现中文乱码）
-scripts\release_build.bat
-
-# 方法2: 使用PowerShell脚本（推荐，解决乱码问题）
-scripts\release_build_fixed.ps1
-
-# 方法3: 直接调用Dart脚本
+# 直接调用发布构建脚本
 dart scripts/release_build.dart patch   # 补丁版本
 dart scripts/release_build.dart minor   # 次版本
 dart scripts/release_build.dart major   # 主版本
+
+# 或者单独增加版本号
+dart scripts/increment_version.dart build  # 仅增加构建号
 ```
 
-**注意：** 脚本会提示选择版本类型（patch/minor/major），其他步骤自动执行无需用户交互。
+## 推荐工作流程
 
-#### 解决中文乱码问题
+-   **日常开发/QA 测试**：
+    -   运行 `dart scripts/increment_version.dart build` 仅增加构建号。
+    -   然后手动执行 `flutter clean && flutter pub get && flutter build apk --release`。
+-   **正式发布**：
+    -   运行 `scripts/release_build_fixed.ps1`（推荐）。
+    -   根据发布类型选择 `patch`、`minor` 或 `major`。
+    -   或者直接使用 `dart scripts/release_build.dart [patch|minor|major]`。
 
-如果在Windows终端中遇到中文乱码，推荐使用以下解决方案：
+## 五、编码问题解决方案
 
-1. **使用PowerShell脚本**（推荐）：
-   ```powershell
-   scripts\release_build_fixed.ps1
-   ```
+在 Windows 环境下，我们遇到了中文乱码问题。为了彻底解决这个问题，我们采用了以下策略：
 
-2. **设置终端编码**：
-   ```cmd
-   chcp 65001
-   scripts\release_build.bat
-   ```
+### 问题原因
 
-3. **使用英文界面**：
-   直接使用Dart脚本避免界面显示问题：
-   ```bash
-   dart scripts/release_build.dart patch
-   ```
+-   Windows 控制台默认使用 GBK 编码
+-   Dart 脚本输出使用 UTF-8 编码
+-   编码不匹配导致中文字符显示为乱码
 
-#### 脚本功能
+### 解决方案
 
-一键发布构建脚本会执行以下步骤：
-1. **选择版本类型** - 用户选择版本类型（patch/minor/major）
-2. **增加版本号** - 根据选择的类型增加版本号
-3. **清理构建** - 执行 `flutter clean`
-4. **获取依赖** - 执行 `flutter pub get`
-5. **构建APK** - 执行 `flutter build apk --release`
-6. **显示结果** - 显示APK文件位置和大小信息
-7. **自动打开** - 自动打开APK文件夹
+1.  **Dart 脚本层面**：
+    -   在所有 Dart 脚本的 `main` 函数开头添加 `stdout.encoding = utf8;`
+    -   将所有中文提示信息改为英文，避免编码问题
 
-## 4. 推荐工作流程
+2.  **PowerShell 脚本层面**：
+    -   设置 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
+    -   添加 `chcp 65001` 命令强制设置控制台代码页为 UTF-8
 
-### 日常开发构建
+### 修改后的效果
 
-```bash
-# 方法1: 使用一键构建脚本
-scripts\build_apk.bat
+-   所有输出信息均为英文，避免乱码
+-   在任何 Windows 环境下都能正常显示
+-   保持了脚本的功能完整性
 
-# 方法2: 手动步骤
-dart scripts/increment_version.dart build
-flutter clean
-flutter pub get
-flutter build apk --release
-```
+## 总结
 
-### 发布版本构建（推荐使用新的一键脚本）
+通过将 Dart 的跨平台能力与 PowerShell 脚本相结合，我们创建了一套强大而灵活的自动化构建系统。它不仅减少了手动操作，降低了出错风险，还通过解决编码问题确保了在 Windows 环境下的稳定运行。希望这套脚本能为你的 Flutter 开发流程带来便利。
 
-```bash
-# 新方法: 一键发布构建（推荐）
-scripts\release_build.bat
-
-# 或者直接指定版本类型
-dart scripts/release_build.dart patch   # 补丁版本
-dart scripts/release_build.dart minor   # 次版本
-dart scripts/release_build.dart major   # 主版本
-
-# 传统方法: 手动步骤
-dart scripts/increment_version.dart patch  # 或 minor/major
-flutter clean
-flutter pub get
-flutter build apk --release
-```
-
-## 5. 版本号策略建议
-
-- **日常测试构建**: 只增加构建号 (`build`)
-- **Bug修复**: 增加补丁版本号 (`patch`)
-- **新功能**: 增加次版本号 (`minor`)
-- **重大更新**: 增加主版本号 (`major`)
-
-## 6. 注意事项
-
-1. **Google Play Store**: 每次上传新APK时，`versionCode`必须比之前的版本大
-2. **版本回退**: 如果需要回退版本号，请手动编辑 `pubspec.yaml`
-3. **团队协作**: 建议在版本控制中提交版本号变更
-4. **自动化CI/CD**: 可以将这些脚本集成到CI/CD流水线中
-
-## 7. 故障排除
-
-### 常见问题
-
-**Q: 脚本提示找不到 pubspec.yaml**
-A: 请确保在Flutter项目根目录运行脚本
-
-**Q: 版本号格式错误**
-A: 确保 pubspec.yaml 中的版本号格式为 `major.minor.patch+build`
 
 **Q: PowerShell执行策略限制**
-A: 使用 `powershell -ExecutionPolicy Bypass -File scripts/build_apk.ps1`
+A: 使用 `powershell -ExecutionPolicy Bypass -File scripts/release_build_fixed.ps1`
 
 **Q: Dart命令找不到**
 A: 确保Flutter SDK已正确安装并添加到PATH环境变量
 
 **Q: 出现中文乱码**
-A: 使用PowerShell脚本 `scripts\release_build_fixed.ps1` 或设置终端编码 `chcp 65001`
+A: 我们已经将所有输出改为英文并在脚本中设置了正确的编码，应该不会再出现乱码问题。如果仍有问题，请使用 `chcp 65001` 设置终端编码
 
 **Q: Flutter命令找不到**
 A: 检查Flutter是否已安装并添加到系统PATH，或使用完整路径运行Flutter命令

@@ -6,10 +6,12 @@ import 'dart:convert';
 /// 自动增加Flutter项目版本号的脚本
 /// 使用方法：dart scripts/increment_version.dart [major|minor|patch|build]
 void main(List<String> args) async {
+  // 强制设置输出编码为UTF-8，解决Windows下乱码问题
+  stdout.encoding = utf8;
   final pubspecFile = File('pubspec.yaml');
   
   if (!pubspecFile.existsSync()) {
-    print('错误: 找不到 pubspec.yaml 文件');
+    print('Error: pubspec.yaml file not found');
     exit(1);
   }
 
@@ -30,7 +32,7 @@ void main(List<String> args) async {
   }
   
   if (versionLineIndex == -1) {
-    print('错误: 在 pubspec.yaml 中找不到版本信息');
+    print('Error: Version information not found in pubspec.yaml');
     exit(1);
   }
   
@@ -38,7 +40,7 @@ void main(List<String> args) async {
   final versionMatch = RegExp(r'version:\s*(\d+)\.(\d+)\.(\d+)\+(\d+)').firstMatch(currentVersionLine);
   
   if (versionMatch == null) {
-    print('错误: 版本号格式不正确，应为 major.minor.patch+build');
+    print('Error: Version format incorrect, should be major.minor.patch+build');
     exit(1);
   }
   
@@ -47,7 +49,7 @@ void main(List<String> args) async {
   int patch = int.parse(versionMatch.group(3)!);
   int build = int.parse(versionMatch.group(4)!);
   
-  print('当前版本: $major.$minor.$patch+$build');
+  print('Current version: $major.$minor.$patch+$build');
   
   // 根据参数决定增加哪个版本号
   String incrementType = args.isNotEmpty ? args[0].toLowerCase() : 'build';
@@ -75,7 +77,7 @@ void main(List<String> args) async {
   }
   
   final newVersion = '$major.$minor.$patch+$build';
-  print('新版本: $newVersion');
+  print('New version: $newVersion');
   
   // 更新版本行
   lines[versionLineIndex] = 'version: $newVersion';
@@ -83,11 +85,5 @@ void main(List<String> args) async {
   // 写回文件
   await pubspecFile.writeAsString(lines.join('\n'));
   
-  print('版本号已更新到: $newVersion');
-  print('\n使用说明:');
-  print('- dart scripts/increment_version.dart        # 增加构建号 (默认)');
-  print('- dart scripts/increment_version.dart build  # 增加构建号');
-  print('- dart scripts/increment_version.dart patch  # 增加补丁版本号');
-  print('- dart scripts/increment_version.dart minor  # 增加次版本号');
-  print('- dart scripts/increment_version.dart major  # 增加主版本号');
+  print('Version updated to: $newVersion');
 }
