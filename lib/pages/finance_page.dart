@@ -130,6 +130,17 @@ class _FinancePageState extends State<FinancePage> {
             DateTime.now().toString().substring(0, 19),
       );
       
+      // 检查待显示列表中是否已存在相同的新闻（content和author都相同）
+      final isDuplicate = _pendingNewsList.any((existingNews) => 
+          existingNews.content == newNews.content && 
+          existingNews.author == newNews.author);
+      
+      // 如果是重复数据，则不处理
+      if (isDuplicate) {
+        _logger.d('检测到重复的财经新闻数据，跳过处理');
+        return;
+      }
+      
       setState(() {
         // 将新消息添加到待显示列表
         _pendingNewsList.insert(0, newNews);

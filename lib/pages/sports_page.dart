@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// 体育页面 - 足球赛事信息
 class SportsPage extends StatefulWidget {
@@ -8,11 +9,12 @@ class SportsPage extends StatefulWidget {
   State<SportsPage> createState() => _SportsPageState();
 }
 
-class _SportsPageState extends State<SportsPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
+  late TabController _primaryTabController;
+  late List<TabController> _secondaryTabControllers;
   
-  // Tab标签列表
-  final List<String> _tabs = [
+  // 一级Tab标签列表
+  final List<String> _primaryTabs = [
     'AC米兰',
     '英超',
     '德甲',
@@ -20,23 +22,100 @@ class _SportsPageState extends State<SportsPage> with SingleTickerProviderStateM
     '意甲',
     '欧冠',
     '欧联',
-    '欧协联'
+    '欧协联',
+    '深度'
   ];
+  
+  // 二级Tab配置
+  final Map<String, List<String>> _secondaryTabsConfig = {
+    'AC米兰': ['动态', '赛程'],
+    '英超': ['动态', '赛程', '积分'],
+    '德甲': ['动态', '赛程', '积分'],
+    '西甲': ['动态', '赛程', '积分'],
+    '意甲': ['动态', '赛程', '积分'],
+    '欧冠': ['动态', '赛程', '积分'],
+    '欧联': ['动态', '赛程', '积分'],
+    '欧协联': ['动态', '赛程', '积分'],
+    '深度': [], // 深度没有二级Tab
+  };
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    _primaryTabController = TabController(length: _primaryTabs.length, vsync: this);
+    
+    // 初始化二级TabController列表
+    _secondaryTabControllers = _primaryTabs.map((tab) {
+      final secondaryTabs = _secondaryTabsConfig[tab] ?? [];
+      // 如果没有二级Tab，创建一个length为1的TabController作为占位
+      final length = secondaryTabs.isEmpty ? 1 : secondaryTabs.length;
+      return TabController(length: length, vsync: this);
+    }).toList();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _primaryTabController.dispose();
+    for (var controller in _secondaryTabControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  /// 构建Tab内容页面
-  Widget _buildTabContent(String tabName) {
+  /// 构建一级Tab内容页面
+  Widget _buildPrimaryTabContent(int primaryIndex) {
+    final primaryTabName = _primaryTabs[primaryIndex];
+    final secondaryTabs = _secondaryTabsConfig[primaryTabName] ?? [];
+    
+    // 如果没有二级Tab（如"深度"），直接显示内容
+    if (secondaryTabs.isEmpty) {
+      return _buildContentPage(primaryTabName, '');
+    }
+    
+    // 有二级Tab的情况
+    return Column(
+      children: [
+        // 二级Tab栏
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _secondaryTabControllers[primaryIndex],
+            indicatorColor: const Color.fromARGB(255, 119, 34, 34),
+            indicatorWeight: 2,
+            labelColor: const Color.fromARGB(255, 119, 34, 34),
+            unselectedLabelColor: Colors.grey[600],
+            labelStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+            ),
+            tabs: secondaryTabs.map((tab) => Tab(
+              text: tab,
+              height: 40,
+            )).toList(),
+          ),
+        ),
+        // 二级Tab内容区域
+        Expanded(
+          child: TabBarView(
+            controller: _secondaryTabControllers[primaryIndex],
+            physics: const NeverScrollableScrollPhysics(),
+            children: secondaryTabs.map((secondaryTab) => 
+              _buildContentPage(primaryTabName, secondaryTab)
+            ).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  /// 构建具体内容页面
+  Widget _buildContentPage(String primaryTab, String secondaryTab) {
+    final displayText = secondaryTab.isEmpty ? primaryTab : '$primaryTab - $secondaryTab';
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -48,7 +127,7 @@ class _SportsPageState extends State<SportsPage> with SingleTickerProviderStateM
            ),
           const SizedBox(height: 20),
           Text(
-            '$tabName 赛事信息',
+            '$displayText 信息',
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -72,19 +151,29 @@ class _SportsPageState extends State<SportsPage> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: Column(
-        children: [
-
-          // Tab标签栏
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
+      appBar: AppBar(
+        backgroundColor: const Color.fromARGB(255, 119, 34, 34),
+        elevation: 0,
+        toolbarHeight: 0,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color.fromARGB(255, 119, 34, 34),
+          statusBarIconBrightness: Brightness.light,
+        ),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            // 一级Tab标签栏
+            Container(
+              color: const Color.fromARGB(255, 119, 34, 34),
+              child: TabBar(
+              controller: _primaryTabController,
               isScrollable: true,
-              indicatorColor: Colors.orange,
+              indicatorColor: Colors.white,
               indicatorWeight: 3,
-              labelColor: Colors.orange,
-              unselectedLabelColor: Colors.grey[600],
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
               labelStyle: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -93,20 +182,23 @@ class _SportsPageState extends State<SportsPage> with SingleTickerProviderStateM
                 fontSize: 16,
                 fontWeight: FontWeight.normal,
               ),
-              tabs: _tabs.map((tab) => Tab(
+              tabs: _primaryTabs.map((tab) => Tab(
                 text: tab,
                 height: 50,
               )).toList(),
             ),
           ),
-          // Tab内容区域
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: _tabs.map((tab) => _buildTabContent(tab)).toList(),
+            // 一级Tab内容区域（包含二级Tab）
+            Expanded(
+              child: TabBarView(
+                controller: _primaryTabController,
+                children: List.generate(_primaryTabs.length, (index) => 
+                  _buildPrimaryTabContent(index)
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
