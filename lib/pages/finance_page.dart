@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:logger/logger.dart';
+import 'package:flutter/foundation.dart';
 import '../models/finance_model.dart';
 import '../services/http_service.dart';
 import '../services/socket_manager.dart';
@@ -385,13 +387,24 @@ class _FinancePageState extends State<FinancePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        backgroundColor: const Color.fromARGB(255, 119, 34, 34),
+        elevation: 0,
+        toolbarHeight: 0,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color.fromARGB(255, 119, 34, 34),
+          statusBarIconBrightness: Brightness.light,
+        ),
+      ),
       body: SafeArea(
+        top: false,
         child: Stack(
           children: [
             Column(
               children: [
-              // Socket连接状态指示器
-              _buildConnectionStatusIndicator(),
+              // Socket连接状态指示器（仅在开发环境显示）
+              if (kDebugMode) _buildConnectionStatusIndicator(),
               // 新消息通知栏
               if (_newMessageCount > 0) ...[
                 Container(
