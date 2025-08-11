@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:logger/logger.dart';
 import 'package:flutter/foundation.dart';
+import 'package:share_plus/share_plus.dart';
+// 条件导入，避免Web平台兼容性问题
+import 'package:screenshot/screenshot.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import '../models/finance_model.dart';
 import '../services/http_service.dart';
 import '../services/socket_manager.dart';
@@ -62,6 +68,9 @@ class _FinancePageState extends State<FinancePage> {
   
   // Socket连接状态
   bool _isSocketConnected = false; // Socket.IO连接状态
+  
+  // 截图控制器映射（仅在非Web平台使用）
+  final Map<String, ScreenshotController> _screenshotControllers = {};
 
   @override
   void initState() {
@@ -284,13 +293,30 @@ class _FinancePageState extends State<FinancePage> {
   Widget _buildNewsCard(FinanceNews news, int index) {
     final isExpanded = _expandedCards.contains(news.uniqueId);
     
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    // 为每个卡片创建独立的截图控制器（仅在非Web平台）
+    if (!kIsWeb && !_screenshotControllers.containsKey(news.uniqueId)) {
+      _screenshotControllers[news.uniqueId] = ScreenshotController();
+    }
+    
+    Widget cardContent = Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -314,23 +340,36 @@ class _FinancePageState extends State<FinancePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildAuthorTag(news.author),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.access_time,
-                      size: 16,
-                      color: Colors.grey,
+                    Text(
+                      news.author,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 12),
                     Text(
                       news.publishTime,
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         color: Colors.grey,
                       ),
                     ),
                   ],
+                ),
+                GestureDetector(
+                  onTap: () {
+                    // 分享功能
+                    _shareNews(news);
+                  },
+                  child: const Icon(
+                    Icons.share,
+                    size: 18,
+                    color: Colors.grey,
+                  ),
                 ),
               ],
             ),
@@ -338,34 +377,184 @@ class _FinancePageState extends State<FinancePage> {
         ),
       ),
     );
+    
+    // 根据平台决定是否使用Screenshot包装器
+    if (kIsWeb) {
+      return cardContent;
+    } else {
+      return Screenshot(
+        controller: _screenshotControllers[news.uniqueId]!,
+        child: cardContent,
+      );
+    }
   }
 
-  /// 构建作者标签
-  Widget _buildAuthorTag(String author) {
-    Color backgroundColor;
-    Color textColor = Colors.white;
-    
-    if (author.contains('财联社')) {
-      backgroundColor = Colors.red;
-    } else if (author.contains('新浪财经')) {
-      backgroundColor = Colors.blue;
-    } else {
-      backgroundColor = Colors.grey;
+  /// 分享新闻
+  Future<void> _shareNews(FinanceNews news) async {
+    try {
+      if (kIsWeb) {
+        // Web平台直接分享文本内容
+        await Share.share(
+          '${news.content}\n\n作者: ${news.author}\n时间: ${news.publishTime}',
+          subject: '财经新闻分享',
+        );
+        _showSuccessSnackBar('分享成功');
+      } else {
+        // 移动平台使用截图分享
+        _logger.i('开始生成新闻卡片图片: ${news.content.substring(0, 20)}...');
+        
+        // 获取对应的截图控制器
+        final controller = _screenshotControllers[news.uniqueId];
+        if (controller == null) {
+          _logger.e('未找到对应的截图控制器');
+          return;
+        }
+        
+        // 生成截图
+        final Uint8List? imageBytes = await controller.capture(
+          delay: const Duration(milliseconds: 100),
+          pixelRatio: 2.0,
+        );
+        
+        if (imageBytes == null) {
+          _logger.e('截图生成失败');
+          _showErrorSnackBar('图片生成失败，请重试');
+          return;
+        }
+        
+        // 显示分享选择对话框
+        _showShareDialog(imageBytes, news);
+      }
+      
+    } catch (e, stackTrace) {
+      _logger.e('分享新闻失败', error: e, stackTrace: stackTrace);
+      _showErrorSnackBar('分享失败: ${e.toString()}');
     }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
+  }
+  
+  /// 显示分享选择对话框
+  void _showShareDialog(Uint8List imageBytes, FinanceNews news) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('分享选项'),
+          content: const Text('请选择分享方式'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _shareToWeChat(imageBytes, news);
+              },
+              child: const Text('分享到微信'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _saveToLocal(imageBytes, news);
+              },
+              child: const Text('保存到本地'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// 分享到微信
+  Future<void> _shareToWeChat(Uint8List imageBytes, FinanceNews news) async {
+    try {
+      if (kIsWeb) {
+        // Web平台直接分享文本
+        await Share.share(
+          '${news.content}\n\n作者: ${news.author}\n时间: ${news.publishTime}',
+          subject: '财经新闻分享',
+        );
+      } else {
+        // 移动平台分享图片
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/news_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(imageBytes);
+        
+        // 使用share_plus分享图片
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: '${news.content}\n\n来源: ${news.author}\n时间: ${news.publishTime}',
+          subject: '财经新闻分享',
+        );
+      }
+      
+      _logger.i('已调用系统分享功能');
+      _showSuccessSnackBar('分享成功');
+    } catch (e, stackTrace) {
+      _logger.e('分享到微信失败', error: e, stackTrace: stackTrace);
+      _showErrorSnackBar('分享失败: ${e.toString()}');
+    }
+  }
+  
+  /// 保存到本地
+  Future<void> _saveToLocal(Uint8List imageBytes, FinanceNews news) async {
+    try {
+      if (kIsWeb) {
+        // Web平台暂不支持直接保存到本地
+        _showErrorSnackBar('Web平台暂不支持保存到本地，请使用分享功能');
+        return;
+      }
+      
+      // 获取下载目录
+       Directory? directory;
+       if (Platform.isAndroid) {
+         directory = await getExternalStorageDirectory();
+       } else {
+         directory = await getApplicationDocumentsDirectory();
+       }
+       
+       if (directory == null) {
+         throw Exception('无法获取存储目录');
+       }
+       
+       // 创建文件名
+       final fileName = 'news_${DateTime.now().millisecondsSinceEpoch}.png';
+       final file = File('${directory.path}/$fileName');
+      
+      // 保存图片
+      await file.writeAsBytes(imageBytes);
+      
+      _logger.i('图片已保存到: ${file.path}');
+      _showSuccessSnackBar('图片已保存到: ${file.path}');
+      
+    } catch (e, stackTrace) {
+      _logger.e('保存到本地失败', error: e, stackTrace: stackTrace);
+      _showErrorSnackBar('保存失败: ${e.toString()}');
+    }
+  }
+  
+  /// 显示成功提示
+  void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
       ),
-      child: Text(
-        author,
-        style: TextStyle(
-          fontSize: 12,
-          color: textColor,
-          fontWeight: FontWeight.w500,
-        ),
+    );
+  }
+  
+  /// 显示错误提示
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -379,6 +568,8 @@ class _FinancePageState extends State<FinancePage> {
     _connectionSubscription?.cancel();
     // 清理滚动控制器
     _scrollController.dispose();
+    // 清理截图控制器
+    _screenshotControllers.clear();
     
     _logger.d('财经页面资源已清理');
     super.dispose();
