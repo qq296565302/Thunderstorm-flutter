@@ -434,34 +434,172 @@ class _FinancePageState extends State<FinancePage> {
   
   /// 显示分享选择对话框
   void _showShareDialog(Uint8List imageBytes, FinanceNews news) {
+    final ScreenshotController dialogScreenshotController = ScreenshotController();
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('分享选项'),
-          content: const Text('请选择分享方式'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _shareToWeChat(imageBytes, news);
-              },
-              child: const Text('分享到微信'),
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.85,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 顶部标题
+                const Text(
+                  '雷雨新闻',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                
+                // 可截图的内容区域
+                Screenshot(
+                  controller: dialogScreenshotController,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.2),
+                          spreadRadius: 1,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 顶部标题（在卡片内）
+                        const Text(
+                          '雷雨新闻',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // 时间
+                        Text(
+                          news.publishTime,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // 新闻内容（完整版）
+                        Text(
+                          news.content,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // 作者信息
+                        Text(
+                          '来源：${news.author}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // 分享选项
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          if (kIsWeb) {
+                            _shareToWeChat(imageBytes, news);
+                          } else {
+                            final dialogImageBytes = await dialogScreenshotController.capture();
+                            _shareToWeChat(dialogImageBytes!, news);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.green.shade50,
+                          foregroundColor: Colors.green.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('分享到微信'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          if (kIsWeb) {
+                            _saveToLocal(imageBytes, news);
+                          } else {
+                            final dialogImageBytes = await dialogScreenshotController.capture();
+                            _saveToLocal(dialogImageBytes!, news);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.blue.shade50,
+                          foregroundColor: Colors.blue.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('保存到本地'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.grey.shade100,
+                          foregroundColor: Colors.grey.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _saveToLocal(imageBytes, news);
-              },
-              child: const Text('保存到本地'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
+          ),
         );
       },
     );
