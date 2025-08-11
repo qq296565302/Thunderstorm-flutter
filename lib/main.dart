@@ -142,7 +142,7 @@ class CustomBottomNavBar extends StatelessWidget {
           _buildNavItem(
             index: 1,
             icon: Icons.sports_soccer,
-            label: '体育',
+            label: '足球',
             isSelected: selectedIndex == 1,
           ),
         ],
