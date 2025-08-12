@@ -257,8 +257,8 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     );
   }
 
-  /// 将格林尼治时间转换为北京时间
-  String _convertToBeijingTime(String gmtTimeString) {
+  /// 将格林尼治时间转换为北京时间，包含星期几信息
+  Map<String, String> _convertToBeijingTime(String gmtTimeString) {
     try {
       // 解析GMT时间字符串
       DateTime gmtTime = DateTime.parse(gmtTimeString);
@@ -266,13 +266,23 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       // 转换为北京时间（UTC+8）
       DateTime beijingTime = gmtTime.add(const Duration(hours: 8));
       
+      // 星期几的中文映射
+      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      String weekday = weekdays[beijingTime.weekday - 1];
+      
       // 格式化为易读的时间格式
       String formattedTime = '${beijingTime.month.toString().padLeft(2, '0')}-${beijingTime.day.toString().padLeft(2, '0')} ${beijingTime.hour.toString().padLeft(2, '0')}:${beijingTime.minute.toString().padLeft(2, '0')}';
       
-      return formattedTime;
+      return {
+        'time': formattedTime,
+        'weekday': weekday,
+      };
     } catch (e) {
       // 如果解析失败，返回原始字符串
-      return gmtTimeString;
+      return {
+        'time': gmtTimeString,
+        'weekday': '',
+      };
     }
   }
 
@@ -296,21 +306,46 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // 比赛时间
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 119, 34, 34).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _convertToBeijingTime(match.startPlay),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color.fromARGB(255, 119, 34, 34),
-                  fontWeight: FontWeight.w600,
+            // 比赛时间和标题
+            Column(
+              children: [
+                // 比赛时间和星期几
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color.fromARGB(255, 119, 34, 34).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Builder(
+                    builder: (context) {
+                      final timeInfo = _convertToBeijingTime(match.startPlay);
+                      return Text(
+                        '${timeInfo['time']} ${timeInfo['weekday']}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color.fromARGB(255, 119, 34, 34),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
+                // 比赛标题
+                if (match.matchTitle != null && match.matchTitle!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    match.matchTitle!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 16),
             

@@ -9,6 +9,7 @@ class MatchSchedule {
   final String teamBLogo;     // 客队logo
   final String startPlay;     // 比赛开始时间
   final List<String> tvList;  // 视频转播方
+  final String matchTitle;    // 比赛标题
 
   MatchSchedule({
     required this.teamAName,
@@ -17,6 +18,7 @@ class MatchSchedule {
     required this.teamBLogo,
     required this.startPlay,
     required this.tvList,
+    required this.matchTitle,
   });
 
   /// 从JSON创建对象
@@ -54,6 +56,7 @@ class MatchSchedule {
       teamBLogo: json['team_B_logo'] ?? '',
       startPlay: json['start_play'] ?? '',
       tvList: tvList,
+      matchTitle: json['match_title'] ?? '',
     );
   }
 }

@@ -87,12 +87,15 @@ class _MainPageState extends State<MainPage> {
       body: Stack(
         children: [
           // 主要内容区域
-          _pages[_selectedIndex],
+          Padding(
+            padding: const EdgeInsets.only(bottom: 70),
+            child: _pages[_selectedIndex],
+          ),
           // 底部导航栏
           Positioned(
-            bottom: 20,
-            left: MediaQuery.of(context).size.width * 0.05,
-            right: MediaQuery.of(context).size.width * 0.05,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: CustomBottomNavBar(
             selectedIndex: _selectedIndex,
             onItemTapped: _onItemTapped,
@@ -118,10 +121,10 @@ class CustomBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 80,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(25),
@@ -160,25 +163,26 @@ class CustomBottomNavBar extends StatelessWidget {
     return GestureDetector(
       onTap: () => onItemTapped(index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected ? Colors.deepPurple.withAlpha(25) : Colors.transparent,
           borderRadius: BorderRadius.circular(15),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               color: isSelected ? Colors.deepPurple : Colors.grey,
-              size: 24,
+              size: 20,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 1),
             Text(
               label,
               style: TextStyle(
                 color: isSelected ? Colors.deepPurple : Colors.grey,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
