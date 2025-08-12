@@ -84,24 +84,28 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // 主要内容区域
-          Padding(
-            padding: const EdgeInsets.only(bottom: 70),
-            child: _pages[_selectedIndex],
-          ),
-          // 底部导航栏
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: CustomBottomNavBar(
-            selectedIndex: _selectedIndex,
-            onItemTapped: _onItemTapped,
-          ),
-          ),
-        ],
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 主要内容区域
+            Padding(
+              padding: const EdgeInsets.only(bottom: 70),
+              child: _pages[_selectedIndex],
+            ),
+            // 底部导航栏
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: CustomBottomNavBar(
+                  selectedIndex: _selectedIndex,
+                  onItemTapped: _onItemTapped,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

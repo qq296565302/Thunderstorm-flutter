@@ -45,6 +45,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   final Map<String, String?> _nextDateData = {}; // 各联赛的nextDate
   final Map<String, bool> _isLoadingData = {}; // 各联赛的加载状态
   final Map<String, bool> _hasMoreData = {}; // 各联赛是否还有更多数据
+  final Map<String, bool> _finishFlag = {}; // 各联赛是否为最后一页数据
   final Map<String, ScrollController> _scrollControllers = {}; // 各联赛的滚动控制器
 
   @override
@@ -67,6 +68,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       _nextDateData[league] = null;
       _isLoadingData[league] = false;
       _hasMoreData[league] = true;
+      _finishFlag[league] = false;
       
       // 添加滚动监听
       _scrollControllers[league]!.addListener(() {
@@ -124,7 +126,10 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
           _scheduleData[league] = response.matches;
         }
         _nextDateData[league] = response.nextDate;
-        _hasMoreData[league] = response.nextDate != null && (response.nextDate?.isNotEmpty ?? false);
+        // 如果nextDate为空字符串，表示没有更多数据了
+        final isFinished = response.nextDate == null || response.nextDate == '';
+        _finishFlag[league] = isFinished;
+        _hasMoreData[league] = !isFinished;
         _isLoadingData[league] = false;
       });
     } catch (e) {
@@ -137,7 +142,10 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   
   /// 加载更多数据
   void _loadMoreScheduleData(String league) {
-    _loadScheduleData(league, isLoadMore: true);
+    // 检查是否还有更多数据可以加载
+    if (_hasMoreData[league] == true) {
+      _loadScheduleData(league, isLoadMore: true);
+    }
   }
 
   /// 构建一级Tab内容页面
@@ -297,24 +305,31 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     }
     
     // 显示赛程列表
+    final isFinished = _finishFlag[leagueName] ?? false;
     return ListView.builder(
       controller: _scrollControllers[leagueName],
       padding: const EdgeInsets.all(16),
-      itemCount: matches.length + (isLoading ? 1 : 0), // 加载时多显示一个加载指示器
+      itemCount: matches.length + (isLoading ? 1 : (isFinished ? 1 : 0)), // 加载时或已完成时多显示一个项目
       itemBuilder: (context, index) {
         if (index < matches.length) {
           final match = matches[index];
           return _buildMatchCard(match);
         } else {
-          // 显示底部加载指示器
-          return const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
+          if (isLoading) {
+            // 显示底部加载指示器
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
+                ),
               ),
-            ),
-          );
+            );
+          } else if (isFinished) {
+            // 显示"没有更多赛程"提示
+            return _buildNoMoreDataWidget();
+          }
+          return const SizedBox.shrink();
         }
       },
     );
@@ -616,6 +631,43 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 构建"没有更多赛程"提示组件
+  Widget _buildNoMoreDataWidget() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
+      child: Row(
+        children: [
+          // 左侧分割线
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Colors.grey[400],
+            ),
+          ),
+          // 中间文字
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              '没有更多赛程',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ),
+          // 右侧分割线
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Colors.grey[400],
+            ),
+          ),
+        ],
       ),
     );
   }
