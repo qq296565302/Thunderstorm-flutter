@@ -257,6 +257,25 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     );
   }
 
+  /// 将格林尼治时间转换为北京时间
+  String _convertToBeijingTime(String gmtTimeString) {
+    try {
+      // 解析GMT时间字符串
+      DateTime gmtTime = DateTime.parse(gmtTimeString);
+      
+      // 转换为北京时间（UTC+8）
+      DateTime beijingTime = gmtTime.add(const Duration(hours: 8));
+      
+      // 格式化为易读的时间格式
+      String formattedTime = '${beijingTime.month.toString().padLeft(2, '0')}-${beijingTime.day.toString().padLeft(2, '0')} ${beijingTime.hour.toString().padLeft(2, '0')}:${beijingTime.minute.toString().padLeft(2, '0')}';
+      
+      return formattedTime;
+    } catch (e) {
+      // 如果解析失败，返回原始字符串
+      return gmtTimeString;
+    }
+  }
+
   /// 构建比赛卡片
   Widget _buildMatchCard(MatchSchedule match) {
     return Container(
@@ -285,7 +304,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                match.startPlay,
+                _convertToBeijingTime(match.startPlay),
                 style: const TextStyle(
                   fontSize: 12,
                   color: Color.fromARGB(255, 119, 34, 34),
@@ -308,10 +327,6 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                         height: 50,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(25),
-                          border: Border.all(
-                            color: Colors.grey.withValues(alpha: 0.2),
-                            width: 1,
-                          ),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(25),
@@ -380,10 +395,6 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                         height: 50,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(25),
-                          border: Border.all(
-                            color: Colors.grey.withValues(alpha: 0.2),
-                            width: 1,
-                          ),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(25),

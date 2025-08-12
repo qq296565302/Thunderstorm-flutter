@@ -20,7 +20,9 @@ class MatchSchedule {
   });
 
   /// 从JSON创建对象
-  factory MatchSchedule.fromJson(Map<String, dynamic> json) {
+  /// [json] JSON数据
+  /// [leagueName] 联赛名称，用于特殊处理
+  factory MatchSchedule.fromJson(Map<String, dynamic> json, {String? leagueName}) {
     // 安全处理TVList字段
     List<String> tvList = [];
     final tvListData = json['TVList'];
@@ -34,6 +36,14 @@ class MatchSchedule {
               ? tvListData.split(',').map((e) => e.trim()).toList()
               : [tvListData];
         }
+      }
+    }
+    
+    // 德甲赛程特殊处理：追加咪咕视频
+    if (leagueName == '德甲' && tvList.isNotEmpty) {
+      // 检查是否已经包含咪咕视频，避免重复添加
+      if (!tvList.any((tv) => tv.contains('咪咕视频'))) {
+        tvList.add('咪咕视频');
       }
     }
     
@@ -102,7 +112,6 @@ class SportsService {
       // 检查响应状态
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('API响应数据: $data'); // 调试信息
         
         // 检查数据结构
         if (data == null) {
@@ -141,8 +150,7 @@ class SportsService {
           list = data;
         }
         
-        print('解析到的list长度: ${list.length}'); // 调试信息
-        return list.map((item) => MatchSchedule.fromJson(item)).toList();
+        return list.map((item) => MatchSchedule.fromJson(item, leagueName: leagueName)).toList();
       } else {
         throw Exception('请求失败: ${response.statusCode} - ${response.body}');
       }

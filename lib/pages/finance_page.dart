@@ -71,6 +71,11 @@ class _FinancePageState extends State<FinancePage> {
   
   // 截图控制器映射（仅在非Web平台使用）
   final Map<String, ScreenshotController> _screenshotControllers = {};
+  
+  // 分页相关状态
+  int _currentPage = 1;
+  bool _hasMoreData = true;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -94,6 +99,11 @@ class _FinancePageState extends State<FinancePage> {
       setState(() {
         _showBackToTopButton = shouldShow;
       });
+    }
+    
+    // 检测是否滑动到底部，触发分页加载
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 100) {
+      _loadMoreData();
     }
   }
 
@@ -222,6 +232,8 @@ class _FinancePageState extends State<FinancePage> {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
+        _currentPage = 1;
+        _hasMoreData = true;
       });
 
       final response = await _httpService.get('/finance', params: {
@@ -236,6 +248,7 @@ class _FinancePageState extends State<FinancePage> {
       setState(() {
         _newsList = financeResponse.data;
         _isLoading = false;
+        _hasMoreData = financeResponse.data.length >= _FinancePageConstants.defaultPageSize;
       });
       
       _logger.i('成功加载 ${financeResponse.data.length} 条财经新闻');
@@ -250,6 +263,52 @@ class _FinancePageState extends State<FinancePage> {
     }
   }
   
+  /// 加载更多数据
+  Future<void> _loadMoreData() async {
+    if (!mounted || _isLoadingMore || !_hasMoreData || _isLoading) return;
+    
+    try {
+      setState(() {
+        _isLoadingMore = true;
+      });
+      
+      final nextPage = _currentPage + 1;
+      final response = await _httpService.get('/finance', params: {
+        'page': nextPage,
+        'limit': _FinancePageConstants.defaultPageSize,
+      });
+
+      if (!mounted) return;
+      
+      final financeResponse = FinanceResponse.fromJson(response);
+      
+      setState(() {
+        _currentPage = nextPage;
+        _newsList.addAll(financeResponse.data);
+        _isLoadingMore = false;
+        _hasMoreData = financeResponse.data.length >= _FinancePageConstants.defaultPageSize;
+      });
+      
+      _logger.i('成功加载第$nextPage页 ${financeResponse.data.length} 条财经新闻');
+    } catch (e, stackTrace) {
+      if (!mounted) return;
+      
+      _logger.e('加载更多财经数据失败', error: e, stackTrace: stackTrace);
+      setState(() {
+        _isLoadingMore = false;
+      });
+      
+      // 显示错误提示
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加载更多数据失败: ${_formatErrorMessage(e)}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+  
   /// 格式化错误信息
   String _formatErrorMessage(dynamic error) {
     if (error.toString().contains('SocketException')) {
@@ -260,6 +319,46 @@ class _FinancePageState extends State<FinancePage> {
       return '数据格式错误，请联系技术支持';
     }
     return '加载失败：${error.toString()}';
+  }
+  
+  /// 构建加载更多指示器
+  Widget _buildLoadMoreIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: _isLoadingMore
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '正在加载更多...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              )
+            : !_hasMoreData
+                ? Text(
+                    '没有更多数据了',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade500,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+      ),
+    );
   }
 
   /// 构建Socket连接状态指示器
@@ -296,6 +395,7 @@ class _FinancePageState extends State<FinancePage> {
     // 为每个卡片创建独立的截图控制器（仅在非Web平台）
     if (!kIsWeb && !_screenshotControllers.containsKey(news.uniqueId)) {
       _screenshotControllers[news.uniqueId] = ScreenshotController();
+      _logger.d('为新闻卡片创建截图控制器: ${news.uniqueId}');
     }
     
     Widget cardContent = Container(
@@ -406,19 +506,44 @@ class _FinancePageState extends State<FinancePage> {
         // 获取对应的截图控制器
         final controller = _screenshotControllers[news.uniqueId];
         if (controller == null) {
-          _logger.e('未找到对应的截图控制器');
+          _logger.e('未找到对应的截图控制器: ${news.uniqueId}');
+          _showErrorSnackBar('截图控制器未初始化，请重试');
           return;
         }
         
-        // 生成截图
-        final Uint8List? imageBytes = await controller.capture(
-          delay: const Duration(milliseconds: 100),
-          pixelRatio: 2.0,
-        );
+        // 等待Widget完全渲染
+        await Future.delayed(const Duration(milliseconds: 200));
+        
+        // 生成截图，增加重试机制
+        Uint8List? imageBytes;
+        int retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries && imageBytes == null) {
+          try {
+            _logger.i('尝试截图，第${retryCount + 1}次');
+            imageBytes = await controller.capture(
+              delay: Duration(milliseconds: 200 + (retryCount * 100)),
+              pixelRatio: 2.0,
+            );
+            
+            if (imageBytes != null) {
+              _logger.i('截图成功，图片大小: ${imageBytes.length} bytes');
+              break;
+            }
+          } catch (captureError) {
+            _logger.w('第${retryCount + 1}次截图失败: $captureError');
+          }
+          
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await Future.delayed(Duration(milliseconds: 300 * retryCount));
+          }
+        }
         
         if (imageBytes == null) {
-          _logger.e('截图生成失败');
-          _showErrorSnackBar('图片生成失败，请重试');
+          _logger.e('截图生成失败，已重试$maxRetries次');
+          _showErrorSnackBar('图片生成失败，请稍后重试');
           return;
         }
         
@@ -449,24 +574,14 @@ class _FinancePageState extends State<FinancePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 顶部标题
-                const Text(
-                  '雷雨新闻',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
                 const SizedBox(height: 20),
-                
                 // 可截图的内容区域
                 Screenshot(
                   controller: dialogScreenshotController,
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFFEEEEEE),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
@@ -478,18 +593,17 @@ class _FinancePageState extends State<FinancePage> {
                       ],
                     ),
                     padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    margin: const EdgeInsets.all(8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 顶部标题（在卡片内）
-                        const Text(
-                          '雷雨新闻',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                        // 顶部标题图片（在卡片内）
+                        Center(
+                          child: Image.asset(
+                            'assets/screenshot-bg.png',
+                            height: 80,
+                            fit: BoxFit.contain,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 16),
                         
@@ -536,12 +650,27 @@ class _FinancePageState extends State<FinancePage> {
                     Expanded(
                       child: TextButton(
                         onPressed: () async {
-                          Navigator.of(context).pop();
                           if (kIsWeb) {
+                            Navigator.of(context).pop();
                             _shareToWeChat(imageBytes, news);
                           } else {
-                            final dialogImageBytes = await dialogScreenshotController.capture();
-                            _shareToWeChat(dialogImageBytes!, news);
+                            try {
+                              // 先截图，再关闭对话框
+                              final dialogImageBytes = await dialogScreenshotController.capture(
+                                delay: const Duration(milliseconds: 200),
+                                pixelRatio: 2.0,
+                              );
+                              Navigator.of(context).pop();
+                              if (dialogImageBytes != null) {
+                                _shareToWeChat(dialogImageBytes, news);
+                              } else {
+                                _showErrorSnackBar('对话框截图失败');
+                              }
+                            } catch (e) {
+                              Navigator.of(context).pop();
+                              _logger.e('对话框截图失败: $e');
+                              _showErrorSnackBar('对话框截图失败: ${e.toString()}');
+                            }
                           }
                         },
                         style: TextButton.styleFrom(
@@ -552,19 +681,34 @@ class _FinancePageState extends State<FinancePage> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text('分享到微信'),
+                        child: const Text('分享给他人'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextButton(
                         onPressed: () async {
-                          Navigator.of(context).pop();
                           if (kIsWeb) {
+                            Navigator.of(context).pop();
                             _saveToLocal(imageBytes, news);
                           } else {
-                            final dialogImageBytes = await dialogScreenshotController.capture();
-                            _saveToLocal(dialogImageBytes!, news);
+                            try {
+                              // 先截图，再关闭对话框
+                              final dialogImageBytes = await dialogScreenshotController.capture(
+                                delay: const Duration(milliseconds: 200),
+                                pixelRatio: 2.0,
+                              );
+                              Navigator.of(context).pop();
+                              if (dialogImageBytes != null) {
+                                _saveToLocal(dialogImageBytes, news);
+                              } else {
+                                _showErrorSnackBar('对话框截图失败');
+                              }
+                            } catch (e) {
+                              Navigator.of(context).pop();
+                              _logger.e('对话框截图失败: $e');
+                              _showErrorSnackBar('对话框截图失败: ${e.toString()}');
+                            }
                           }
                         },
                         style: TextButton.styleFrom(
@@ -707,7 +851,12 @@ class _FinancePageState extends State<FinancePage> {
     // 清理滚动控制器
     _scrollController.dispose();
     // 清理截图控制器
-    _screenshotControllers.clear();
+    try {
+      _logger.d('清理${_screenshotControllers.length}个截图控制器');
+      _screenshotControllers.clear();
+    } catch (e) {
+      _logger.w('清理截图控制器时出错: $e');
+    }
     
     _logger.d('财经页面资源已清理');
     super.dispose();
@@ -855,9 +1004,14 @@ class _FinancePageState extends State<FinancePage> {
                                 child: ListView.builder(
                                   controller: _scrollController, // 添加滚动控制器
                                   padding: const EdgeInsets.all(8), // 设置内容区域的padding值
-                                  itemCount: _newsList.length,
+                                  itemCount: _newsList.length + (_hasMoreData || _isLoadingMore ? 1 : 0),
                                   itemBuilder: (context, index) {
-                                    return _buildNewsCard(_newsList[index], index);
+                                    if (index < _newsList.length) {
+                                      return _buildNewsCard(_newsList[index], index);
+                                    } else {
+                                      // 显示加载更多指示器
+                                      return _buildLoadMoreIndicator();
+                                    }
                                   },
                                 ),
                               ),
