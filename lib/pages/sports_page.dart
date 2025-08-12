@@ -39,6 +39,13 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     '欧协联': ['动态', '赛程', '积分'],
     '深度': [], // 深度没有二级Tab
   };
+  
+  // 赛程数据状态管理
+  final Map<String, List<MatchSchedule>> _scheduleData = {}; // 各联赛的赛程数据
+  final Map<String, String?> _nextDateData = {}; // 各联赛的nextDate
+  final Map<String, bool> _isLoadingData = {}; // 各联赛的加载状态
+  final Map<String, bool> _hasMoreData = {}; // 各联赛是否还有更多数据
+  final Map<String, ScrollController> _scrollControllers = {}; // 各联赛的滚动控制器
 
   @override
   void initState() {
@@ -52,6 +59,20 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       final length = secondaryTabs.isEmpty ? 1 : secondaryTabs.length;
       return TabController(length: length, vsync: this);
     }).toList();
+    
+    // 初始化各联赛的滚动控制器和数据状态
+    for (String league in _primaryTabs) {
+      _scrollControllers[league] = ScrollController();
+      _scheduleData[league] = [];
+      _nextDateData[league] = null;
+      _isLoadingData[league] = false;
+      _hasMoreData[league] = true;
+      
+      // 添加滚动监听
+      _scrollControllers[league]!.addListener(() {
+        _onScroll(league);
+      });
+    }
   }
 
   @override
@@ -60,7 +81,63 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     for (var controller in _secondaryTabControllers) {
       controller.dispose();
     }
+    // 释放滚动控制器
+    for (var controller in _scrollControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+  
+  /// 滚动监听方法
+  void _onScroll(String league) {
+    final controller = _scrollControllers[league]!;
+    if (controller.position.pixels >= controller.position.maxScrollExtent - 200) {
+      // 距离底部200像素时开始加载更多数据
+      _loadMoreScheduleData(league);
+    }
+  }
+  
+  /// 加载赛程数据（首次加载或分页加载）
+  Future<void> _loadScheduleData(String league, {bool isLoadMore = false}) async {
+    if (_isLoadingData[league] == true || (!isLoadMore && (_scheduleData[league]?.isNotEmpty ?? false))) {
+      return; // 正在加载中或已有数据时不重复加载
+    }
+    
+    if (isLoadMore && _hasMoreData[league] == false) {
+      return; // 没有更多数据时不加载
+    }
+    
+    setState(() {
+      _isLoadingData[league] = true;
+    });
+    
+    try {
+      final response = await SportsService().getLeagueSchedule(
+         league, 
+         start: isLoadMore ? (_nextDateData[league] ?? '') : ''
+       );
+      
+      setState(() {
+        if (isLoadMore) {
+          _scheduleData[league]?.addAll(response.matches);
+        } else {
+          _scheduleData[league] = response.matches;
+        }
+        _nextDateData[league] = response.nextDate;
+        _hasMoreData[league] = response.nextDate != null && (response.nextDate?.isNotEmpty ?? false);
+        _isLoadingData[league] = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingData[league] = false;
+      });
+      // 可以在这里添加错误处理，比如显示错误提示
+    }
+  }
+  
+  /// 加载更多数据
+  void _loadMoreScheduleData(String league) {
+    _loadScheduleData(league, isLoadMore: true);
   }
 
   /// 构建一级Tab内容页面
@@ -156,103 +233,89 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
 
   /// 构建赛程页面
   Widget _buildSchedulePage(String leagueName) {
-    return FutureBuilder<List<MatchSchedule>>(
-      future: SportsService().getLeagueSchedule(leagueName),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
+    // 首次加载数据
+    if ((_scheduleData[leagueName]?.isEmpty ?? true) && _isLoadingData[leagueName] == false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadScheduleData(leagueName);
+      });
+    }
+    
+    final matches = _scheduleData[leagueName] ?? [];
+    final isLoading = _isLoadingData[leagueName] ?? false;
+    
+    // 首次加载时显示加载指示器
+    if (matches.isEmpty && isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
+        ),
+      );
+    }
+    
+    // 没有数据时显示空状态
+    if (matches.isEmpty && !isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.event_busy,
+              size: 60,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '暂无赛程',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '当前没有可显示的比赛安排',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                _loadScheduleData(leagueName);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromARGB(255, 119, 34, 34),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 显示赛程列表
+    return ListView.builder(
+      controller: _scrollControllers[leagueName],
+      padding: const EdgeInsets.all(16),
+      itemCount: matches.length + (isLoading ? 1 : 0), // 加载时多显示一个加载指示器
+      itemBuilder: (context, index) {
+        if (index < matches.length) {
+          final match = matches[index];
+          return _buildMatchCard(match);
+        } else {
+          // 显示底部加载指示器
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
+              ),
             ),
           );
         }
-        
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 60,
-                  color: Colors.red[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '加载失败',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[700],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${snapshot.error}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {}); // 重新构建以重试
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 119, 34, 34),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('重试'),
-                ),
-              ],
-            ),
-          );
-        }
-        
-        final matches = snapshot.data ?? [];
-        
-        if (matches.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.event_busy,
-                  size: 60,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '暂无赛程',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[700],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '当前没有可显示的比赛安排',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-        
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: matches.length,
-          itemBuilder: (context, index) {
-            final match = matches[index];
-            return _buildMatchCard(match);
-          },
-        );
       },
     );
   }
@@ -407,16 +470,35 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                   ),
                 ),
                 
-                // VS
+                // VS和转播平台
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: const Text(
-                    'VS',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color.fromARGB(255, 119, 34, 34),
-                    ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'VS',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color.fromARGB(255, 119, 34, 34),
+                        ),
+                      ),
+                      // 转播平台
+                      if (match.tvList.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          match.tvList.join('、'),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 
@@ -476,44 +558,6 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            
-            // 转播信息
-            if (match.tvList.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.grey.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '转播平台:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      match.tvList.join('、'),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
       ),
