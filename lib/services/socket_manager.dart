@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:logger/logger.dart';
+import 'package:flutter/widgets.dart';
+import 'notification_service.dart';
 
 /// Socket.IO连接管理器
 /// 负责统一管理Socket.IO连接、事件监听和数据分发
@@ -26,13 +28,17 @@ class SocketManager {
   String? _serverUrl;
   Timer? _reconnectTimer;
   Timer? _heartbeatTimer;
-  Timer? _connectionCheckTimer; // 连接状态检测定时器
+  Timer? _connectionCheckTimer;
   int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 50; // 增加重连次数
+  static const int _maxReconnectAttempts = 50;
   static const Duration _reconnectDelay = Duration(seconds: 1);
-  static const Duration _heartbeatInterval = Duration(seconds: 10); // 缩短心跳间隔
-  static const Duration _connectionCheckInterval = Duration(seconds: 5); // 连接检测间隔
+  static const Duration _heartbeatInterval = Duration(seconds: 10);
+  static const Duration _connectionCheckInterval = Duration(seconds: 5);
   bool _shouldReconnect = true;
+
+  // App生命周期状态（用于判断前后台）
+  AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
+  final StreamController<AppLifecycleState> _appLifecycleController = StreamController<AppLifecycleState>.broadcast();
 
   // 连接状态流控制器
   final StreamController<bool> _connectionController = StreamController<bool>.broadcast();
@@ -61,15 +67,22 @@ class SocketManager {
   /// 获取通用消息流
   Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
   
+  /// 获取应用生命周期状态流
+  Stream<AppLifecycleState> get appLifecycleStream => _appLifecycleController.stream;
+  
   /// 获取当前连接状态
   bool get isConnected => _isConnected;
   
   /// 获取服务器地址
   String? get serverUrl => _serverUrl;
 
+  /// 更新应用生命周期状态
+  void updateAppLifecycleState(AppLifecycleState state) {
+    _appLifecycleState = state;
+    _appLifecycleController.add(state);
+  }
+
   /// 连接到Socket.IO服务器
-  /// [url] 服务器地址
-  /// [options] 连接选项
   Future<void> connect(String url, {Map<String, dynamic>? options}) async {
     try {
       if (_socket != null && _isConnected) {
@@ -78,19 +91,15 @@ class SocketManager {
 
       _serverUrl = url;
       
-      // 创建Socket.IO连接
       _socket = io.io(url, io.OptionBuilder()
           .setTransports(['websocket'])
           .disableAutoConnect()
-          .setReconnectionAttempts(0) // 禁用内置重连，使用自定义重连
-          .setTimeout(20000) // 连接超时20秒
+          .setReconnectionAttempts(0)
+          .setTimeout(20000)
           .setExtraHeaders(options ?? {})
           .build());
 
-      // 设置事件监听器
       _setupEventListeners();
-      
-      // 连接到服务器
       _socket!.connect();
       
     } catch (e) {
@@ -103,38 +112,39 @@ class SocketManager {
   void _setupEventListeners() {
     if (_socket == null) return;
 
-    // 连接成功事件
     _socket!.onConnect((_) {
       _logger.i('Socket.IO连接成功');
-      _reconnectAttempts = 0; // 重置重连计数
+      _reconnectAttempts = 0;
       _updateConnectionStatus(true);
-      // 连接成功后发送subscribeFinance消息
       _socket!.emit('subscribeFinance');
-      // 启动心跳检测
       _startHeartbeat();
-      // 启动连接状态检测
       _startConnectionCheck();
     });
 
-    // 监听financePush事件
     _socket!.on('financePush', (data) {
       try {
         if (data is Map<String, dynamic>) {
           _logger.d('收到financePush数据: $data');
           
-          // 检查数据结构并提取content字段
+          Map<String, dynamic>? financeContent;
           if (data.containsKey('content') && data['content'] is Map<String, dynamic>) {
-            // 提取财经新闻内容数据
-            Map<String, dynamic> financeContent = data['content'];
-            // 添加额外的元数据
+            financeContent = Map<String, dynamic>.from(data['content']);
             financeContent['message'] = data['message'] ?? '';
             financeContent['timestamp'] = data['timestamp'] ?? '';
             financeContent['type'] = data['type'] ?? 'finance';
-            
-            _financeNewsController.add(financeContent);
           } else {
-            // 如果数据直接就是财经新闻内容，直接使用
-            _financeNewsController.add(data);
+            financeContent = Map<String, dynamic>.from(data);
+          }
+
+          _financeNewsController.add(financeContent);
+
+          // 如果APP在后台，发送系统通知
+          if (_appLifecycleState != AppLifecycleState.resumed) {
+            final title = (financeContent['author']?.toString().isNotEmpty ?? false)
+                ? financeContent['author'].toString()
+                : '新的财经消息';
+            final body = financeContent['content']?.toString() ?? '您有一条新的财经消息';
+            NotificationService().showFinanceNotification(title: title, body: body, payload: 'finance');
           }
         }
       } catch (e) {
@@ -142,19 +152,16 @@ class SocketManager {
       }
     });
 
-    // 连接断开事件
     _socket!.onDisconnect((reason) {
       _logger.w('Socket.IO连接断开，原因: $reason');
       _updateConnectionStatus(false);
       _stopHeartbeat();
       _stopConnectionCheck();
-      // 如果不是主动断开，则尝试重连
       if (_shouldReconnect && reason != 'io client disconnect') {
         _scheduleReconnect();
       }
     });
 
-    // 连接错误事件
     _socket!.onConnectError((error) {
       _logger.e('Socket.IO连接错误: $error');
       _updateConnectionStatus(false);
@@ -163,21 +170,16 @@ class SocketManager {
       }
     });
 
-    // 监听心跳响应
     _socket!.on('pong', (_) {
       _logger.d('收到服务器心跳响应');
     });
-
   }
 
-  /// 更新连接状态
   void _updateConnectionStatus(bool connected) {
     _isConnected = connected;
     _connectionController.add(connected);
   }
 
-  /// 订阅频道
-  /// [channel] 频道名称（如：finance_news, sports_news）
   void subscribe(String channel) {
     if (_socket != null && _isConnected) {
       _socket!.emit('subscribe', channel);
@@ -186,8 +188,6 @@ class SocketManager {
     }
   }
 
-  /// 取消订阅频道
-  /// [channel] 频道名称
   void unsubscribe(String channel) {
     if (_socket != null && _isConnected) {
       _socket!.emit('unsubscribe', channel);
@@ -197,9 +197,6 @@ class SocketManager {
     }
   }
 
-  /// 发送消息
-  /// [event] 事件名称
-  /// [data] 消息数据
   void sendMessage(String event, dynamic data) {
     if (_socket != null && _isConnected) {
       _socket!.emit(event, data);
@@ -209,9 +206,8 @@ class SocketManager {
     }
   }
 
-  /// 断开连接
   void disconnect() {
-    _shouldReconnect = false; // 停止自动重连
+    _shouldReconnect = false;
     _stopReconnectTimer();
     _stopHeartbeat();
     _stopConnectionCheck();
@@ -224,7 +220,6 @@ class SocketManager {
     }
   }
 
-  /// 重新连接
   Future<void> reconnect() async {
     if (_serverUrl != null) {
       _shouldReconnect = true;
@@ -241,7 +236,6 @@ class SocketManager {
     }
   }
 
-  /// 安排重连
   void _scheduleReconnect() {
     if (!_shouldReconnect || _reconnectAttempts >= _maxReconnectAttempts) {
       if (_reconnectAttempts >= _maxReconnectAttempts) {
@@ -262,19 +256,17 @@ class SocketManager {
           await connect(_serverUrl!);
         } catch (e) {
           _logger.e('重连失败: $e');
-          _scheduleReconnect(); // 继续尝试重连
+          _scheduleReconnect();
         }
       }
     });
   }
 
-  /// 停止重连定时器
   void _stopReconnectTimer() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
   }
 
-  /// 启动心跳检测
   void _startHeartbeat() {
     _stopHeartbeat();
     _heartbeatTimer = Timer.periodic(_heartbeatInterval, (timer) {
@@ -286,25 +278,21 @@ class SocketManager {
     });
   }
 
-  /// 停止心跳检测
   void _stopHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
   }
 
-  /// 启动连接状态检测
   void _startConnectionCheck() {
     _stopConnectionCheck();
     _connectionCheckTimer = Timer.periodic(_connectionCheckInterval, (timer) {
       if (_socket != null) {
-        // 检查Socket实际连接状态
         bool actuallyConnected = _socket!.connected;
         if (_isConnected != actuallyConnected) {
           _logger.w('检测到连接状态不一致，实际状态: $actuallyConnected，记录状态: $_isConnected');
           _updateConnectionStatus(actuallyConnected);
         }
         
-        // 如果应该连接但实际未连接，尝试重连
         if (_shouldReconnect && !actuallyConnected) {
           _logger.w('检测到连接断开，尝试重连');
           _scheduleReconnect();
@@ -316,26 +304,24 @@ class SocketManager {
     });
   }
 
-  /// 停止连接状态检测
   void _stopConnectionCheck() {
     _connectionCheckTimer?.cancel();
     _connectionCheckTimer = null;
   }
 
-  /// 释放资源
   void dispose() {
     disconnect();
     _stopReconnectTimer();
     _stopHeartbeat();
     _stopConnectionCheck();
     _connectionController.close();
+    _appLifecycleController.close();
     _financeNewsController.close();
     _sportsNewsController.close();
     _messageController.close();
     _logger.i('SocketManager资源已释放');
   }
 
-  /// 获取连接信息
   Map<String, dynamic> getConnectionInfo() {
     return {
       'isConnected': _isConnected,
@@ -347,7 +333,6 @@ class SocketManager {
     };
   }
 
-  /// 重置重连状态
   void resetReconnectState() {
     _reconnectAttempts = 0;
     _shouldReconnect = true;

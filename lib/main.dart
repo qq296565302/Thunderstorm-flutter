@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'pages/finance_page.dart';
 import 'pages/sports_page.dart';
 import 'services/socket_manager.dart';
+import 'services/notification_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,7 +33,7 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   int _selectedIndex = 0;
 
   /// 页面列表
@@ -44,7 +45,18 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // 初始为前台状态
+    SocketManager().updateAppLifecycleState(AppLifecycleState.resumed);
+
     _initializeSocket();
+    _initializeNotifications();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 将生命周期变化传递给 SocketManager，用于判断是否在后台
+    SocketManager().updateAppLifecycleState(state);
   }
 
   /// 初始化Socket连接
@@ -58,21 +70,20 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-
-
-
+  void _initializeNotifications() async {
+    final ns = NotificationService();
+    await ns.init();
+    await ns.requestAndroidNotificationPermissionIfNeeded();
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // 断开Socket连接
     final socketManager = SocketManager();
     socketManager.disconnect();
     super.dispose();
   }
-
-
-
-
 
   /// 处理底部导航栏点击事件
   void _onItemTapped(int index) {
