@@ -490,14 +490,20 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     children: [
-                      const Text(
-                        'VS',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color.fromARGB(255, 119, 34, 34),
-                        ),
-                      ),
+                      _isMatchInFuture(match.startPlay)
+                          ? const Icon(
+                              Icons.notifications_outlined,
+                              size: 20,
+                              color: Color.fromARGB(255, 119, 34, 34),
+                            )
+                          : const Text(
+                              'VS',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color.fromARGB(255, 119, 34, 34),
+                              ),
+                            ),
                       // 转播平台
                       if (match.tvList.isNotEmpty) ...[
                         const SizedBox(height: 8),
@@ -670,5 +676,25 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
         ],
       ),
     );
+  }
+
+  /// 判断比赛时间是否晚于当前时间
+  bool _isMatchInFuture(String gmtTimeString) {
+    try {
+      // 解析GMT时间字符串
+      DateTime gmtTime = DateTime.parse(gmtTimeString);
+      
+      // 转换为北京时间（UTC+8）
+      DateTime beijingTime = gmtTime.add(const Duration(hours: 8));
+      
+      // 获取当前北京时间
+      DateTime now = DateTime.now();
+      
+      // 比较时间
+      return beijingTime.isAfter(now);
+    } catch (e) {
+      // 如果解析失败，默认返回false
+      return false;
+    }
   }
 }
