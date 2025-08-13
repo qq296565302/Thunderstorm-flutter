@@ -31,7 +31,9 @@ class FinanceNews {
   /// 获取新闻的唯一标识符
   /// 使用内容、发布时间和作者的组合生成唯一标识
   String get uniqueId {
-    return '${content.hashCode}_${publishTime.hashCode}_${author.hashCode}';
+    // 使用更安全的方式生成唯一ID，避免hashCode冲突
+    final combinedString = '$content|$publishTime|$author';
+    return combinedString.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').substring(0, combinedString.length > 50 ? 50 : combinedString.length) + '_${combinedString.hashCode.abs()}';
   }
 
   @override

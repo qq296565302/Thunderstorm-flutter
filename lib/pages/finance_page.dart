@@ -195,6 +195,9 @@ class _FinancePageState extends State<FinancePage> {
       _newMessageCount = 0;
     });
     
+    // 清理不再需要的截图控制器
+    _cleanupUnusedScreenshotControllers();
+    
     // 滚动到顶部显示新消息
     _scrollToTopAnimated();
     
@@ -224,6 +227,29 @@ class _FinancePageState extends State<FinancePage> {
     }
   }
 
+  /// 清理不再需要的截图控制器
+   /// 由于现在采用按需创建策略，只清理不在当前新闻列表中的控制器
+   void _cleanupUnusedScreenshotControllers() {
+     if (kIsWeb || _screenshotControllers.isEmpty) return;
+     
+     final currentNewsIds = _newsList.map((news) => news.uniqueId).toSet();
+     final controllersToRemove = <String>[];
+     
+     for (final id in _screenshotControllers.keys) {
+       if (!currentNewsIds.contains(id)) {
+         controllersToRemove.add(id);
+       }
+     }
+     
+     for (final id in controllersToRemove) {
+       _screenshotControllers.remove(id);
+     }
+     
+     if (controllersToRemove.isNotEmpty) {
+       _logger.d('清理了${controllersToRemove.length}个不再需要的截图控制器');
+     }
+   }
+
   /// 加载财经数据
   Future<void> _loadFinanceData() async {
     if (!mounted) return;
@@ -250,6 +276,9 @@ class _FinancePageState extends State<FinancePage> {
         _isLoading = false;
         _hasMoreData = financeResponse.data.length >= _FinancePageConstants.defaultPageSize;
       });
+      
+      // 清理不再需要的截图控制器
+      _cleanupUnusedScreenshotControllers();
       
       _logger.i('成功加载 ${financeResponse.data.length} 条财经新闻');
     } catch (e, stackTrace) {
@@ -288,6 +317,9 @@ class _FinancePageState extends State<FinancePage> {
         _isLoadingMore = false;
         _hasMoreData = financeResponse.data.length >= _FinancePageConstants.defaultPageSize;
       });
+      
+      // 清理不再需要的截图控制器
+      _cleanupUnusedScreenshotControllers();
       
       _logger.i('成功加载第$nextPage页 ${financeResponse.data.length} 条财经新闻');
     } catch (e, stackTrace) {
@@ -392,12 +424,6 @@ class _FinancePageState extends State<FinancePage> {
   Widget _buildNewsCard(FinanceNews news, int index) {
     final isExpanded = _expandedCards.contains(news.uniqueId);
     
-    // 为每个卡片创建独立的截图控制器（仅在非Web平台）
-    if (!kIsWeb && !_screenshotControllers.containsKey(news.uniqueId)) {
-      _screenshotControllers[news.uniqueId] = ScreenshotController();
-      _logger.d('为新闻卡片创建截图控制器: ${news.uniqueId}');
-    }
-    
     Widget cardContent = Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -478,8 +504,8 @@ class _FinancePageState extends State<FinancePage> {
       ),
     );
     
-    // 根据平台决定是否使用Screenshot包装器
-    if (kIsWeb) {
+    // 根据平台和截图控制器的存在决定是否使用Screenshot包装器
+    if (kIsWeb || !_screenshotControllers.containsKey(news.uniqueId)) {
       return cardContent;
     } else {
       return Screenshot(
@@ -503,12 +529,19 @@ class _FinancePageState extends State<FinancePage> {
         // 移动平台使用截图分享
         _logger.i('开始生成新闻卡片图片: ${news.content.substring(0, 20)}...');
         
-        // 获取对应的截图控制器
-        final controller = _screenshotControllers[news.uniqueId];
-        if (controller == null) {
-          _logger.e('未找到对应的截图控制器: ${news.uniqueId}');
-          _showErrorSnackBar('截图控制器未初始化，请重试');
-          return;
+        // 在分享时创建截图控制器，避免预先创建过多控制器
+        ScreenshotController controller;
+        if (_screenshotControllers.containsKey(news.uniqueId)) {
+          controller = _screenshotControllers[news.uniqueId]!;
+        } else {
+          controller = ScreenshotController();
+          _screenshotControllers[news.uniqueId] = controller;
+          _logger.d('为分享功能创建截图控制器: ${news.uniqueId}');
+          
+          // 需要重新构建Widget以应用新的截图控制器
+          setState(() {});
+          // 等待Widget重建完成
+          await Future.delayed(const Duration(milliseconds: 100));
         }
         
         // 等待Widget完全渲染
