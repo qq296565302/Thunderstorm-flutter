@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'pages/finance_page.dart';
 import 'pages/sports_page.dart';
 import 'services/socket_manager.dart';
@@ -14,6 +15,17 @@ class MyApp extends StatelessWidget {
   /// 应用程序的根组件
   @override
   Widget build(BuildContext context) {
+    // 设置系统状态栏样式
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Color.fromRGBO(119, 34, 34, 1), // 状态栏背景色
+        statusBarIconBrightness: Brightness.light, // 状态栏图标为白色
+        statusBarBrightness: Brightness.dark, // iOS状态栏内容为白色
+        systemNavigationBarColor: Colors.white, // 导航栏背景色
+        systemNavigationBarIconBrightness: Brightness.dark, // 导航栏图标为深色
+      ),
+    );
+    
     return MaterialApp(
       title: '雷雨新闻',
       theme: ThemeData(
@@ -107,7 +119,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
           Expanded(
             child: _pages[_selectedIndex],
           ),
-          // 底部导航栏
+          // 底部导航栏 - 添加额外的底部内边距以避免被遮挡
           SafeArea(
             child: CustomBottomNavBar(
               selectedIndex: _selectedIndex,

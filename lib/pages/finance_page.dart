@@ -18,7 +18,7 @@ class _FinancePageConstants {
   static const int maxMainNewsList = 100;
   static const int defaultPageSize = 20;
   static const double scrollThreshold = 200.0;
-  static const double bottomButtonOffset = 120.0;
+  static const double bottomButtonOffset = 40.0;
   static const Duration scrollAnimationDuration = Duration(milliseconds: 500);
   static const Duration newMessageAnimationDuration = Duration(milliseconds: 300);
 }
@@ -31,7 +31,7 @@ class FinancePage extends StatefulWidget {
   State<FinancePage> createState() => _FinancePageState();
 }
 
-class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   final HttpService _httpService = HttpService();
   final SocketManager _socketManager = SocketManager();
   
@@ -69,6 +69,10 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
   List<FinanceNews> _pendingNewsList = []; // 存储待显示的新消息
   int _newMessageCount = 0; // 新消息计数
   
+  // 新消息通知动画控制器
+  late AnimationController _notificationAnimationController;
+  late Animation<Offset> _notificationSlideAnimation;
+  
   // Socket连接状态
   bool _isSocketConnected = false; // Socket.IO连接状态
   
@@ -88,6 +92,24 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
     _setupScrollListener();
     // 添加应用生命周期监听
     WidgetsBinding.instance.addObserver(this);
+    // 初始化动画控制器
+    _initializeAnimations();
+  }
+  
+  /// 初始化动画控制器
+  void _initializeAnimations() {
+    _notificationAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _notificationSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, -1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _notificationAnimationController,
+      curve: Curves.easeOutBack,
+    ));
   }
 
   /// 设置滚动监听器
@@ -177,9 +199,25 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
           _pendingNewsList = _pendingNewsList.take(_FinancePageConstants.maxPendingNews).toList();
         }
       });
+      
+      // 触发新消息通知动画
+      _showNotificationAnimation();
     } catch (e, stackTrace) {
       _logger.e('处理实时财经新闻失败', error: e, stackTrace: stackTrace);
     }
+  }
+  
+  /// 显示新消息通知动画
+  void _showNotificationAnimation() {
+    if (_notificationAnimationController.isCompleted) {
+      _notificationAnimationController.reset();
+    }
+    _notificationAnimationController.forward();
+  }
+  
+  /// 隐藏新消息通知动画
+  void _hideNotificationAnimation() {
+    _notificationAnimationController.reverse();
   }
   
   /// 加载新消息到列表中
@@ -187,6 +225,9 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
     if (_pendingNewsList.isEmpty || !mounted) return;
     
     final newMessagesCount = _pendingNewsList.length;
+    
+    // 先隐藏通知动画
+    _hideNotificationAnimation();
     
     setState(() {
       // 将待显示的新消息添加到主列表顶部
@@ -907,6 +948,8 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
   void dispose() {
     // 移除应用生命周期监听
     WidgetsBinding.instance.removeObserver(this);
+    // 清理动画控制器
+    _notificationAnimationController.dispose();
     // 清理滚动监听器
     _scrollController.removeListener(_onScroll);
     // 清理Socket.IO相关资源
@@ -950,48 +993,48 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
               if (kDebugMode) _buildConnectionStatusIndicator(),
               // 新消息通知栏
               if (_newMessageCount > 0) ...[
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: InkWell(
-                    onTap: _loadNewMessages,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.notifications_active,
-                          color: Colors.blue.shade600,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '接收到 $_newMessageCount 条新消息',
-                          style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
+                SlideTransition(
+                  position: _notificationSlideAnimation,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                      color: Color.fromRGBO(119, 34, 34, 1),
+                    ),
+                    child: InkWell(
+                      onTap: _loadNewMessages,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.notifications_active,
+                            color: Colors.white,
+                            size: 20,
                           ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '点击查看',
-                          style: TextStyle(
-                            color: Colors.blue.shade600,
-                            fontSize: 12,
+                          const SizedBox(width: 8),
+                          Text(
+                            '接收到 $_newMessageCount 条新消息',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.blue.shade600,
-                          size: 12,
-                        ),
-                      ],
+                          const Spacer(),
+                          const Text(
+                            '点击查看',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white70,
+                            size: 12,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
