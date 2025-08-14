@@ -4,7 +4,8 @@ import 'dart:io';
 import 'dart:convert';
 
 /// 自动增加Flutter项目版本号的脚本
-/// 使用方法：dart scripts/increment_version.dart [major|minor|patch|build]
+/// 使用方法：dart scripts/increment_version.dart [test|major|minor|patch|build]
+/// test: 测试版本，只递增build号，与发布版本分开
 void main(List<String> args) async {
   // 强制设置输出编码为UTF-8，解决Windows下乱码问题
   stdout.encoding = utf8;
@@ -69,6 +70,10 @@ void main(List<String> args) async {
     case 'patch':
       patch++;
       build = 1;
+      break;
+    case 'test':
+      // 测试版本只递增build号，保持主版本号不变
+      build++;
       break;
     case 'build':
     default:

@@ -17,15 +17,20 @@ if (-not (Test-Path "pubspec.yaml")) {
 
 # Display version type selection
 Write-Host "Please select release version type:" -ForegroundColor Yellow
+Write-Host "0. test   - Test version (for testing, separate from release version)"
 Write-Host "1. patch  - Patch version (bug fixes)"
 Write-Host "2. minor  - Minor version (new features)"
 Write-Host "3. major  - Major version (major updates)"
 Write-Host ""
 
-$choice = Read-Host "Please select (1-3, default 1)"
+$choice = Read-Host "Please select (0-3, default 1)"
 if ([string]::IsNullOrEmpty($choice)) { $choice = "1" }
 
 switch ($choice) {
+    "0" {
+        $version_type = "test"
+        Write-Host "Selected: Test version build" -ForegroundColor Magenta
+    }
     "1" {
         $version_type = "patch"
         Write-Host "Selected: Patch version build" -ForegroundColor Green

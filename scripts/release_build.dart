@@ -29,9 +29,9 @@ void main(List<String> args) async {
 
   // 确定版本号增加类型
   String versionType = args.isNotEmpty ? args[0].toLowerCase() : 'patch';
-  if (!['patch', 'minor', 'major'].contains(versionType)) {
-    print('Error: Version type must be patch, minor, or major');
-    print('Usage: dart scripts/release_build.dart [patch|minor|major]');
+  if (!['test', 'patch', 'minor', 'major'].contains(versionType)) {
+    print('Error: Version type must be test, patch, minor, or major');
+    print('Usage: dart scripts/release_build.dart [test|patch|minor|major]');
     exit(1);
   }
 

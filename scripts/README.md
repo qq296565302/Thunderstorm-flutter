@@ -28,13 +28,17 @@
 
 ### 功能
 
--   支持 `major`、`minor`、`patch` 和 `build` 四种类型的版本号递增。
+-   支持 `test`、`major`、`minor`、`patch` 和 `build` 五种类型的版本号递增。
+-   `test` 版本：仅递增build号，保持主版本号不变，用于测试打包，与发布版本分开管理。
 -   自动读取、修改并写回 `pubspec.yaml` 文件。
 -   递增 `major`、`minor` 或 `patch` 时，会自动重置后续的版本号和构建号（例如，增加 `minor` 会将 `patch` 重置为 0，`build` 重置为 1）。
 
 ### 使用方法
 
 ```bash
+# 增加测试版本号（仅递增build号，用于测试）
+dart scripts/increment_version.dart test
+
 # 增加构建号 (默认)
 dart scripts/increment_version.dart build
 
@@ -57,7 +61,8 @@ import 'dart:io';
 import 'dart:convert';
 
 /// 自动增加Flutter项目版本号的脚本
-/// 使用方法：dart scripts/increment_version.dart [major|minor|patch|build]
+/// 使用方法：dart scripts/increment_version.dart [test|major|minor|patch|build]
+/// test: 测试版本，只递增build号，与发布版本分开
 void main(List<String> args) async {
   // 强制设置输出编码为UTF-8，解决Windows下乱码问题
   stdout.encoding = utf8;
@@ -123,6 +128,10 @@ void main(List<String> args) async {
       patch++;
       build = 1;
       break;
+    case 'test':
+      // 测试版本只递增build号，保持主版本号不变
+      build++;
+      break;
     case 'build':
     default:
       build++;
@@ -148,7 +157,7 @@ void main(List<String> args) async {
 
 ### 功能
 
-1.  **调用版本号脚本**：根据传入的参数（`patch`, `minor`, `major`）调用 `increment_version.dart`。
+1.  **调用版本号脚本**：根据传入的参数（`test`, `patch`, `minor`, `major`）调用 `increment_version.dart`。
 2.  **执行 Flutter 命令**：依次执行 `flutter clean`、`flutter pub get` 和 `flutter build apk --release`。
 3.  **错误处理**：在每一步都检查进程的退出码，如果失败则中止脚本并打印错误信息。
 4.  **结果输出**：构建成功后，打印 APK 的路径、大小和修改时间。
@@ -164,7 +173,7 @@ import 'dart:convert';
 
 /// 发布版本一键构建脚本
 /// 集成版本号增加、清理、依赖获取和APK构建
-/// 使用方法：dart scripts/release_build.dart [patch|minor|major]
+/// 使用方法：dart scripts/release_build.dart [test|patch|minor|major]
 void main(List<String> args) async {
   // 强制设置输出编码为UTF-8，解决Windows下乱码问题
   stdout.encoding = utf8;
@@ -218,7 +227,8 @@ void main(List<String> args) async {
 
 #### 功能
 
--   提供交互式菜单，让用户选择 `patch`、`minor` 或 `major`。
+-   提供交互式菜单，让用户选择 `test`、`patch`、`minor` 或 `major`。
+-   `test` 选项（选项0）：用于测试打包，仅递增build号，与发布版本号分开管理。
 -   调用 `release_build.dart` 并传入用户的选择。
 -   构建完成后自动打开 APK 所在的文件夹。
 -   在执行前会检查 `flutter` 和 `dart` 命令是否存在，提供更友好的错误提示。
@@ -234,8 +244,9 @@ void main(List<String> args) async {
 
 # 显示版本类型选择
 Write-Host "Please select release version type:" -ForegroundColor Yellow
+Write-Host "0. test   - Test version (for testing, separate from release version)" -ForegroundColor Green
 # ... (其他选项)
-$choice = Read-Host "Please select (1-3, default 1)"
+$choice = Read-Host "Please select (0-3, default 1)"
 
 # ... (根据选择设置 $version_type 变量)
 
@@ -259,16 +270,22 @@ if ($LASTEXITCODE -eq 0) {
 
 ```bash
 # 直接调用发布构建脚本
+dart scripts/release_build.dart test    # 测试版本（仅递增build号）
 dart scripts/release_build.dart patch   # 补丁版本
 dart scripts/release_build.dart minor   # 次版本
 dart scripts/release_build.dart major   # 主版本
 
 # 或者单独增加版本号
+dart scripts/increment_version.dart test   # 测试版本号（仅递增build号）
 dart scripts/increment_version.dart build  # 仅增加构建号
 ```
 
 ## 推荐工作流程
 
+-   **测试打包**：
+    -   运行 `scripts/release_build_fixed.ps1` 并选择选项0（test）。
+    -   或者直接使用 `dart scripts/release_build.dart test`。
+    -   测试版本仅递增build号，不影响发布版本号。
 -   **日常开发/QA 测试**：
     -   运行 `dart scripts/increment_version.dart build` 仅增加构建号。
     -   然后手动执行 `flutter clean && flutter pub get && flutter build apk --release`。
@@ -319,3 +336,9 @@ A: 我们已经将所有输出改为英文并在脚本中设置了正确的编�
 
 **Q: Flutter命令找不到**
 A: 检查Flutter是否已安装并添加到系统PATH，或使用完整路径运行Flutter命令
+
+**Q: test版本和正式版本有什么区别？**
+A: test版本仅递增build号（如1.1.15+1 → 1.1.15+2），主版本号保持不变，用于测试打包；正式版本会根据选择递增major、minor或patch版本号并重置build号为1
+
+**Q: 什么时候使用test版本？**
+A: 在需要频繁测试打包但不想影响正式发布版本号时使用，比如内部测试、QA验证等场景
