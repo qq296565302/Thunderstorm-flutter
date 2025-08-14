@@ -31,9 +31,13 @@ class FinancePage extends StatefulWidget {
   State<FinancePage> createState() => _FinancePageState();
 }
 
-class _FinancePageState extends State<FinancePage> {
+class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   final HttpService _httpService = HttpService();
   final SocketManager _socketManager = SocketManager();
+  
+  /// 保持页面状态，避免切换页面时重建
+  @override
+  bool get wantKeepAlive => true;
   
   /// 创建Logger实例
   static Logger _createLogger() {
@@ -82,6 +86,8 @@ class _FinancePageState extends State<FinancePage> {
     _loadFinanceData();
     _setupSocketListeners();
     _setupScrollListener();
+    // 添加应用生命周期监听
+    WidgetsBinding.instance.addObserver(this);
   }
 
   /// 设置滚动监听器
@@ -873,8 +879,34 @@ class _FinancePageState extends State<FinancePage> {
     );
   }
 
+  /// 监听应用生命周期状态变化
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // 当应用从后台切换回前台时，如果当前页面是财经页面，则加载新消息
+    if (state == AppLifecycleState.resumed && mounted) {
+      _logger.d('应用从后台切换回前台，检查是否需要加载新消息');
+      
+      // 延迟一小段时间确保页面完全恢复
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        
+        // 检查是否有待显示的新消息
+        if (_pendingNewsList.isNotEmpty) {
+          _logger.i('检测到 ${_pendingNewsList.length} 条待显示消息，自动加载');
+          _loadNewMessages();
+        } else {
+          _logger.d('没有待显示的新消息');
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
+    // 移除应用生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
     // 清理滚动监听器
     _scrollController.removeListener(_onScroll);
     // 清理Socket.IO相关资源
@@ -896,6 +928,7 @@ class _FinancePageState extends State<FinancePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 需要调用
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
