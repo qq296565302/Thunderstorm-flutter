@@ -70,10 +70,16 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     }
   }
 
+  /// 初始化通知服务
   void _initializeNotifications() async {
-    final ns = NotificationService();
-    await ns.init();
-    await ns.requestAndroidNotificationPermissionIfNeeded();
+    try {
+      final ns = NotificationService();
+      await ns.init();
+      await ns.requestAndroidNotificationPermissionIfNeeded();
+      debugPrint('通知服务初始化完成');
+    } catch (e) {
+      debugPrint('通知服务初始化失败: $e');
+    }
   }
 
   @override
