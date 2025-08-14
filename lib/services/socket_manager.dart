@@ -114,38 +114,52 @@ class SocketManager {
 
     _socket!.onConnect((_) {
       _logger.i('Socket.IO连接成功');
+      _logger.i('服务器地址: $_serverUrl');
       _reconnectAttempts = 0;
       _updateConnectionStatus(true);
+      
+      // 发送财经订阅请求
+      _logger.i('发送subscribeFinance订阅请求');
       _socket!.emit('subscribeFinance');
+      _logger.i('subscribeFinance订阅请求已发送');
+      
       _startHeartbeat();
       _startConnectionCheck();
+      _logger.i('Socket初始化完成');
     });
 
     _socket!.on('financePush', (data) {
       try {
-        if (data is Map<String, dynamic>) {
-          _logger.d('收到financePush数据: $data');
+        _logger.i('=== 接收到financePush事件 ===');
+        _logger.d('原始数据类型: ${data.runtimeType}');
+        _logger.d('原始数据内容: $data');
+        
+        // 处理数组格式的数据
+        if (data is List<dynamic>) {
+          _logger.d('检测到数组格式数据，包含 ${data.length} 条记录');
           
-          Map<String, dynamic>? financeContent;
-          if (data.containsKey('content') && data['content'] is Map<String, dynamic>) {
-            financeContent = Map<String, dynamic>.from(data['content']);
-            financeContent['message'] = data['message'] ?? '';
-            financeContent['timestamp'] = data['timestamp'] ?? '';
-            financeContent['type'] = data['type'] ?? 'finance';
-          } else {
-            financeContent = Map<String, dynamic>.from(data);
+          // 过滤出有效的Map对象
+          final validItems = data.where((item) => item is Map<String, dynamic>).toList();
+          _logger.d('过滤后有效记录数: ${validItems.length}');
+          
+          for (int i = 0; i < validItems.length; i++) {
+            final item = validItems[i] as Map<String, dynamic>;
+            _logger.d('处理第 ${i + 1} 条有效记录: $item');
+            _processFinanceItem(item, i + 1);
           }
-
-          _financeNewsController.add(financeContent);
-
-          // 如果APP在后台，发送系统通知
-          if (_appLifecycleState != AppLifecycleState.resumed) {
-            final title = (financeContent['author']?.toString().isNotEmpty ?? false)
-                ? financeContent['author'].toString()
-                : '新的财经消息';
-            final body = financeContent['content']?.toString() ?? '您有一条新的财经消息';
-            NotificationService().showFinanceNotification(title: title, body: body, payload: 'finance');
+          
+          // 记录被过滤掉的无效项
+          final invalidItems = data.where((item) => item is! Map<String, dynamic>).toList();
+          if (invalidItems.isNotEmpty) {
+            _logger.w('发现 ${invalidItems.length} 个无效数据项: $invalidItems');
           }
+        }
+        // 处理单个对象格式的数据
+        else if (data is Map<String, dynamic>) {
+          _logger.d('检测到对象格式数据，开始处理');
+          _processFinanceItem(data, 1);
+        } else {
+          _logger.w('接收到的数据格式不正确，期望List<dynamic>或Map<String, dynamic>，实际: ${data.runtimeType}');
         }
       } catch (e) {
         _logger.e('处理financePush事件时发生错误', error: e);
@@ -173,6 +187,56 @@ class SocketManager {
     _socket!.on('pong', (_) {
       _logger.d('收到服务器心跳响应');
     });
+  }
+
+  /// 处理单个财经新闻项
+  void _processFinanceItem(Map<String, dynamic> item, int index) {
+    try {
+      _logger.d('开始处理第 $index 条财经新闻项');
+      _logger.d('原始项数据: $item');
+      
+      Map<String, dynamic> financeContent;
+      
+      // 检查是否有嵌套的content结构
+      if (item.containsKey('content') && item['content'] is Map<String, dynamic>) {
+        _logger.d('检测到嵌套结构，提取content字段');
+        final contentData = item['content'] as Map<String, dynamic>;
+        
+        // 创建最终的财经内容，包含content中的所有字段
+        financeContent = Map<String, dynamic>.from(contentData);
+        
+        // 添加外层的元数据
+        financeContent['message'] = item['message'] ?? '财经数据推送';
+        financeContent['timestamp'] = item['timestamp'] ?? DateTime.now().toIso8601String();
+        financeContent['type'] = item['type'] ?? 'finance';
+        
+        _logger.d('提取的content数据: $contentData');
+      } else {
+        _logger.d('使用扁平结构处理数据');
+        financeContent = Map<String, dynamic>.from(item);
+      }
+
+      _logger.d('最终处理的财经内容: $financeContent');
+      _logger.d('财经新闻流控制器状态 - isClosed: ${_financeNewsController.isClosed}');
+      
+      _financeNewsController.add(financeContent);
+      _logger.i('第 $index 条数据已成功添加到财经新闻流控制器');
+
+      // 如果APP在后台，发送系统通知
+      if (_appLifecycleState != AppLifecycleState.resumed) {
+        _logger.i('应用在后台，准备发送系统通知');
+        final title = (financeContent['author']?.toString().isNotEmpty ?? false)
+            ? financeContent['author'].toString()
+            : '新的财经消息';
+        final body = financeContent['content']?.toString() ?? financeContent['title']?.toString() ?? '您有一条新的财经消息';
+        NotificationService().showFinanceNotification(title: title, body: body, payload: 'finance');
+        _logger.i('系统通知已发送: $title - $body');
+      } else {
+        _logger.d('应用在前台，跳过系统通知');
+      }
+    } catch (e) {
+      _logger.e('处理第 $index 条财经新闻项时发生错误', error: e);
+    }
   }
 
   void _updateConnectionStatus(bool connected) {

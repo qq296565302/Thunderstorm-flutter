@@ -151,11 +151,26 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
     });
     
     // 监听财经新闻实时更新
-    _financeNewsSubscription = _socketManager.financeNewsStream.listen((newsData) {
-      if (mounted) {
-        _handleRealTimeFinanceNews(newsData);
-      }
-    });
+    _financeNewsSubscription = _socketManager.financeNewsStream.listen(
+      (newsData) {
+        _logger.d('=== 财经页面接收到流数据 ===');
+        _logger.d('数据类型: ${newsData.runtimeType}');
+        _logger.d('数据内容: $newsData');
+        _logger.d('页面挂载状态: $mounted');
+        
+        if (mounted) {
+          _handleRealTimeFinanceNews(newsData);
+        } else {
+          _logger.w('页面未挂载，跳过处理实时数据');
+        }
+      },
+      onError: (error) {
+        _logger.e('财经新闻流监听出错', error: error);
+      },
+      onDone: () {
+        _logger.w('财经新闻流已关闭');
+      },
+    );
   }
 
   /// 处理实时财经新闻数据
@@ -163,9 +178,32 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
     if (!mounted) return;
     
     try {
+      _logger.d('处理实时财经新闻数据: $newsData');
+      
+      // 提取新闻内容，优先使用嵌套结构中的content
+      String content;
+      String author;
+      String publishTime;
+      
+      // 检查是否有嵌套的content结构（从Socket数据中提取）
+      if (newsData.containsKey('content') && newsData['content'] is Map<String, dynamic>) {
+        final contentData = newsData['content'] as Map<String, dynamic>;
+        content = contentData['content']?.toString() ?? contentData['title']?.toString() ?? '';
+        author = contentData['author']?.toString() ?? '实时推送';
+        publishTime = contentData['publishTime']?.toString() ?? 
+            DateTime.now().toString().substring(0, 19);
+        _logger.d('使用嵌套结构数据: content=$content, author=$author, publishTime=$publishTime');
+      } else {
+        // 使用扁平结构
+        content = newsData['content']?.toString() ?? newsData['title']?.toString() ?? '';
+        author = newsData['author']?.toString() ?? '实时推送';
+        publishTime = newsData['publishTime']?.toString() ?? 
+            DateTime.now().toString().substring(0, 19);
+        _logger.d('使用扁平结构数据: content=$content, author=$author, publishTime=$publishTime');
+      }
+      
       // 验证必要字段
-      final content = newsData['content']?.toString();
-      if (content == null || content.trim().isEmpty) {
+      if (content.trim().isEmpty) {
         _logger.w('接收到空内容的新闻数据');
         return;
       }
@@ -173,10 +211,11 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
       // 将实时数据转换为FinanceNews对象
       final newNews = FinanceNews(
         content: content,
-        author: newsData['author']?.toString() ?? '实时推送',
-        publishTime: newsData['publishTime']?.toString() ?? 
-            DateTime.now().toString().substring(0, 19),
+        author: author,
+        publishTime: publishTime,
       );
+      
+      _logger.d('创建的FinanceNews对象: ${newNews.toJson()}');
       
       // 检查待显示列表中是否已存在相同的新闻（content和author都相同）
       final isDuplicate = _pendingNewsList.any((existingNews) => 
