@@ -47,6 +47,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   final Map<String, bool> _hasMoreData = {}; // 各联赛是否还有更多数据
   final Map<String, bool> _finishFlag = {}; // 各联赛是否为最后一页数据
   final Map<String, ScrollController> _scrollControllers = {}; // 各联赛的滚动控制器
+  final Map<String, VoidCallback> _scrollListeners = {}; // 各联赛的滚动监听器引用
 
   @override
   void initState() {
@@ -70,10 +71,10 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       _hasMoreData[league] = true;
       _finishFlag[league] = false;
       
-      // 添加滚动监听
-      _scrollControllers[league]!.addListener(() {
-        _onScroll(league);
-      });
+      // 创建并保存滚动监听器引用
+      final listener = () => _onScroll(league);
+      _scrollListeners[league] = listener;
+      _scrollControllers[league]!.addListener(listener);
     }
   }
 
@@ -83,15 +84,26 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     for (var controller in _secondaryTabControllers) {
       controller.dispose();
     }
-    // 释放滚动控制器
-    for (var controller in _scrollControllers.values) {
+    // 先移除滚动监听器，再释放滚动控制器
+    for (var entry in _scrollControllers.entries) {
+      final league = entry.key;
+      final controller = entry.value;
+      final listener = _scrollListeners[league];
+      
+      // 移除特定的监听器
+      if (listener != null) {
+        controller.removeListener(listener);
+      }
       controller.dispose();
     }
+    _scrollListeners.clear();
     super.dispose();
   }
   
   /// 滚动监听方法
   void _onScroll(String league) {
+    if (!mounted) return; // 检查组件是否仍然挂载
+    
     final controller = _scrollControllers[league]!;
     if (controller.position.pixels >= controller.position.maxScrollExtent - 200) {
       // 距离底部200像素时开始加载更多数据
@@ -109,6 +121,8 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       return; // 没有更多数据时不加载
     }
     
+    if (!mounted) return; // 检查组件是否仍然挂载
+    
     setState(() {
       _isLoadingData[league] = true;
     });
@@ -118,6 +132,8 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
          league, 
          start: isLoadMore ? (_nextDateData[league] ?? '') : ''
        );
+      
+      if (!mounted) return; // 异步操作完成后再次检查组件是否仍然挂载
       
       setState(() {
         if (isLoadMore) {
@@ -133,6 +149,8 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
         _isLoadingData[league] = false;
       });
     } catch (e) {
+      if (!mounted) return; // 异常处理时也要检查组件是否仍然挂载
+      
       setState(() {
         _isLoadingData[league] = false;
       });
@@ -244,7 +262,9 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     // 首次加载数据
     if ((_scheduleData[leagueName]?.isEmpty ?? true) && _isLoadingData[leagueName] == false) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadScheduleData(leagueName);
+        if (mounted) {
+          _loadScheduleData(leagueName);
+        }
       });
     }
     
@@ -291,7 +311,9 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
-                _loadScheduleData(leagueName);
+                if (mounted) {
+                  _loadScheduleData(leagueName);
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color.fromARGB(255, 119, 34, 34),

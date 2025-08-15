@@ -248,6 +248,7 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
   
   /// 显示新消息通知动画
   void _showNotificationAnimation() {
+    if (!mounted) return; // 检查组件是否仍然挂载
     if (_notificationAnimationController.isCompleted) {
       _notificationAnimationController.reset();
     }
@@ -256,7 +257,107 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
   
   /// 隐藏新消息通知动画
   void _hideNotificationAnimation() {
+    if (!mounted) return; // 检查组件是否仍然挂载
     _notificationAnimationController.reverse();
+  }
+  
+  /// 下拉刷新处理方法
+  /// 如果有新数据则加载新数据，如果没有新数据则发起API请求获取最新数据
+  Future<void> _onRefresh() async {
+    if (!mounted) return;
+    
+    try {
+      // 如果有待显示的新消息，直接加载
+      if (_pendingNewsList.isNotEmpty) {
+        _logger.i('检测到 ${_pendingNewsList.length} 条待显示消息，直接加载');
+        _loadNewMessages();
+        return;
+      }
+      
+      // 如果没有新数据，发起API请求获取最新数据
+      _logger.i('没有待显示消息，发起API请求获取最新数据');
+      
+      final response = await _httpService.get('/finance', params: {
+        'page': 1,
+        'limit': _FinancePageConstants.defaultPageSize,
+      });
+      
+      if (!mounted) return;
+      
+      final financeResponse = FinanceResponse.fromJson(response);
+      final latestNews = financeResponse.data;
+      
+      if (latestNews.isEmpty) {
+        _logger.i('API返回空数据');
+        return;
+      }
+      
+      // 如果当前列表为空，直接加载新数据
+      if (_newsList.isEmpty) {
+        setState(() {
+          _newsList = latestNews;
+        });
+        _logger.i('当前列表为空，加载了 ${latestNews.length} 条新数据');
+        return;
+      }
+      
+      // 获取当前列表最新一条数据的发布时间
+      final currentLatestTime = DateTime.tryParse(_newsList.first.publishTime);
+      if (currentLatestTime == null) {
+        _logger.w('无法解析当前最新数据的发布时间: ${_newsList.first.publishTime}');
+        return;
+      }
+      
+      // 筛选出发布时间晚于当前列表最新数据的新闻
+      final newNewsToAdd = <FinanceNews>[];
+      for (final news in latestNews) {
+        final newsTime = DateTime.tryParse(news.publishTime);
+        if (newsTime != null && newsTime.isAfter(currentLatestTime)) {
+          // 检查是否已存在相同内容的新闻（避免重复）
+          final isDuplicate = _newsList.any((existingNews) => 
+              existingNews.content == news.content && 
+              existingNews.author == news.author);
+          
+          if (!isDuplicate) {
+            newNewsToAdd.add(news);
+          }
+        }
+      }
+      
+      if (newNewsToAdd.isNotEmpty) {
+        setState(() {
+          // 将新数据添加到列表顶部
+          _newsList.insertAll(0, newNewsToAdd);
+          // 限制主列表长度
+          if (_newsList.length > _FinancePageConstants.maxMainNewsList) {
+            _newsList = _newsList.take(_FinancePageConstants.maxMainNewsList).toList();
+          }
+        });
+        
+        // 清理不再需要的截图控制器
+        _cleanupUnusedScreenshotControllers();
+        
+        // 滚动到顶部显示新消息
+        _scrollToTopAnimated();
+        
+        _logger.i('从API获取并加载了 ${newNewsToAdd.length} 条新数据');
+      } else {
+        _logger.i('API返回的数据中没有比当前列表更新的数据');
+      }
+      
+    } catch (e, stackTrace) {
+      _logger.e('下拉刷新失败', error: e, stackTrace: stackTrace);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('刷新失败: ${_formatErrorMessage(e)}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
   
   /// 加载新消息到列表中
@@ -267,6 +368,8 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
     
     // 先隐藏通知动画
     _hideNotificationAnimation();
+    
+    if (!mounted) return; // 在setState前再次检查mounted状态
     
     setState(() {
       // 将待显示的新消息添加到主列表顶部
@@ -292,6 +395,7 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
   
   /// 动画滚动到顶部
   void _scrollToTopAnimated() {
+    if (!mounted) return; // 检查组件是否仍然挂载
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         0.0,
@@ -303,6 +407,7 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
 
   /// 返回顶部
   void _scrollToTop() {
+    if (!mounted) return; // 检查组件是否仍然挂载
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         0.0,
@@ -1145,9 +1250,7 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
                                 ),
                               )
                             : RefreshIndicator(
-                                onRefresh: () async {
-                                  _loadNewMessages();
-                                },
+                                onRefresh: _onRefresh,
                                 child: ListView.builder(
                                   controller: _scrollController, // 添加滚动控制器
                                   padding: const EdgeInsets.all(8), // 设置内容区域的padding值
