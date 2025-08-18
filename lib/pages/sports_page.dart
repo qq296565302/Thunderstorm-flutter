@@ -330,7 +330,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     final isFinished = _finishFlag[leagueName] ?? false;
     return ListView.builder(
       controller: _scrollControllers[leagueName],
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 0), // 完全移除底部padding，让列表紧贴底部
       itemCount: matches.length + (isLoading ? 1 : (isFinished ? 1 : 0)), // 加载时或已完成时多显示一个项目
       itemBuilder: (context, index) {
         if (index < matches.length) {
@@ -389,7 +389,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   /// 构建比赛卡片
   Widget _buildMatchCard(MatchSchedule match) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8), // 减少卡片间距，让列表更紧凑
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -622,6 +622,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       ),
       body: SafeArea(
         top: false,
+        bottom: false, // 移除底部安全区域，让内容可以延伸到底部
         child: Column(
           children: [
             // 一级Tab标签栏
