@@ -53,8 +53,10 @@ class ScheduleResponse {
 class MatchSchedule {
   final String teamAName;     // 主队名称
   final String teamALogo;     // 主队logo
+  final String? teamAId;      // 主队ID
   final String teamBName;     // 客队名称
   final String teamBLogo;     // 客队logo
+  final String? teamBId;      // 客队ID
   final String startPlay;     // 比赛开始时间
   final List<String> tvList;  // 视频转播方
   final String matchTitle;    // 比赛标题
@@ -62,8 +64,10 @@ class MatchSchedule {
   MatchSchedule({
     required this.teamAName,
     required this.teamALogo,
+    this.teamAId,
     required this.teamBName,
     required this.teamBLogo,
+    this.teamBId,
     required this.startPlay,
     required this.tvList,
     required this.matchTitle,
@@ -100,8 +104,10 @@ class MatchSchedule {
     return MatchSchedule(
       teamAName: json['team_A_name'] ?? '',
       teamALogo: json['team_A_logo'] ?? '',
+      teamAId: json['team_A_id']?.toString(),
       teamBName: json['team_B_name'] ?? '',
       teamBLogo: json['team_B_logo'] ?? '',
+      teamBId: json['team_B_id']?.toString(),
       startPlay: json['start_play'] ?? '',
       tvList: tvList,
       matchTitle: json['match_title'] ?? '',

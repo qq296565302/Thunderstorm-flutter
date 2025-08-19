@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/sports_service.dart';
+import 'team_page.dart';
 
 /// 体育页面 - 足球赛事信息
 class SportsPage extends StatefulWidget {
@@ -454,56 +455,66 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
               children: [
                 // 主队
                 Expanded(
-                  child: Column(
-                    children: [
-                      // 主队logo
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(25),
-                          child: match.teamALogo.isNotEmpty
-                              ? Image.network(
-                                  match.teamALogo,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      color: Colors.grey[200],
-                                      child: const Icon(
-                                        Icons.sports_soccer,
-                                        color: Colors.grey,
-                                        size: 24,
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Container(
-                                  color: Colors.grey[200],
-                                  child: const Icon(
-                                    Icons.sports_soccer,
-                                    color: Colors.grey,
-                                    size: 24,
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // 主队名称
-                      Text(
+                  child: GestureDetector(
+                    onTap: () {
+                      _navigateToTeamPage(
+                        context,
+                        match.teamAId ?? '',
                         match.teamAName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                        match.teamALogo,
+                      );
+                    },
+                    child: Column(
+                      children: [
+                        // 主队logo
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(25),
+                            child: match.teamALogo.isNotEmpty
+                                ? Image.network(
+                                    match.teamALogo,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Colors.grey[200],
+                                        child: const Icon(
+                                          Icons.sports_soccer,
+                                          color: Colors.grey,
+                                          size: 24,
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    color: Colors.grey[200],
+                                    child: const Icon(
+                                      Icons.sports_soccer,
+                                      color: Colors.grey,
+                                      size: 24,
+                                    ),
+                                  ),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        // 主队名称
+                        Text(
+                          match.teamAName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 
@@ -547,56 +558,66 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                 
                 // 客队
                 Expanded(
-                  child: Column(
-                    children: [
-                      // 客队logo
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(25),
-                          child: match.teamBLogo.isNotEmpty
-                              ? Image.network(
-                                  match.teamBLogo,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      color: Colors.grey[200],
-                                      child: const Icon(
-                                        Icons.sports_soccer,
-                                        color: Colors.grey,
-                                        size: 24,
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Container(
-                                  color: Colors.grey[200],
-                                  child: const Icon(
-                                    Icons.sports_soccer,
-                                    color: Colors.grey,
-                                    size: 24,
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // 客队名称
-                      Text(
+                  child: GestureDetector(
+                    onTap: () {
+                      _navigateToTeamPage(
+                        context,
+                        match.teamBId ?? '',
                         match.teamBName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                        match.teamBLogo,
+                      );
+                    },
+                    child: Column(
+                      children: [
+                        // 客队logo
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(25),
+                            child: match.teamBLogo.isNotEmpty
+                                ? Image.network(
+                                    match.teamBLogo,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Colors.grey[200],
+                                        child: const Icon(
+                                          Icons.sports_soccer,
+                                          color: Colors.grey,
+                                          size: 24,
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    color: Colors.grey[200],
+                                    child: const Icon(
+                                      Icons.sports_soccer,
+                                      color: Colors.grey,
+                                      size: 24,
+                                    ),
+                                  ),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        // 客队名称
+                        Text(
+                          match.teamBName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -659,6 +680,31 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 导航到球队页面
+  /// 传递球队ID、名称和logo信息
+  void _navigateToTeamPage(BuildContext context, String teamId, String teamName, String teamLogo) {
+    if (teamId.isEmpty) {
+      // 如果球队ID为空，显示提示信息
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('球队信息不完整，无法跳转'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => TeamPage(
+          teamId: teamId,
+          teamName: teamName,
+          teamLogo: teamLogo,
         ),
       ),
     );
