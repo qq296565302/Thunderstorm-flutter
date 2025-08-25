@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/http_service.dart';
 
 /// 球队页面组件
 /// 显示球队详细信息，包含顶部标题栏和球队内容
@@ -20,12 +21,14 @@ class TeamPage extends StatefulWidget {
 
 class _TeamPageState extends State<TeamPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  List<Map<String, dynamic>> _players = [];
+  bool _isLoadingPlayers = false;
 
   @override
   void initState() {
     super.initState();
     // 初始化TabController
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     // 初始化时可以根据teamId请求球队详细信息
     _loadTeamData();
   }
@@ -41,6 +44,33 @@ class _TeamPageState extends State<TeamPage> with SingleTickerProviderStateMixin
   Future<void> _loadTeamData() async {
     // TODO: 实现根据widget.teamId请求球队数据的逻辑
     print('Loading team data for team ID: ${widget.teamId}');
+  }
+
+  /// 加载球员数据
+  /// 根据teamId请求球员列表接口
+  Future<void> _loadPlayersData() async {
+    if (_isLoadingPlayers) return;
+    
+    setState(() {
+      _isLoadingPlayers = true;
+    });
+
+    try {
+      final response = await HttpService().get('/sport/team/${widget.teamId}/players');
+      if (response['code'] == 200 && response['data'] != null) {
+        setState(() {
+          _players = List<Map<String, dynamic>>.from(response['data']);
+        });
+      } else {
+        print('Failed to load players data: ${response['message']}');
+      }
+    } catch (e) {
+      print('Error loading players data: $e');
+    } finally {
+      setState(() {
+        _isLoadingPlayers = false;
+      });
+    }
   }
 
   @override
@@ -177,6 +207,7 @@ class _TeamPageState extends State<TeamPage> with SingleTickerProviderStateMixin
           Tab(text: '动态'),
           Tab(text: '赛程'),
           Tab(text: '数据'),
+          Tab(text: '球员'),
         ],
       ),
     );
@@ -191,6 +222,7 @@ class _TeamPageState extends State<TeamPage> with SingleTickerProviderStateMixin
         _buildDynamicTab(),
         _buildScheduleTab(),
         _buildDataTab(),
+        _buildPlayersTab(),
       ],
     );
   }
@@ -348,6 +380,283 @@ class _TeamPageState extends State<TeamPage> with SingleTickerProviderStateMixin
           ),
         ],
       ),
+    );
+  }
+
+  /// 构建球员标签页
+  /// 显示球队球员信息
+  Widget _buildPlayersTab() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '球队球员',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              IconButton(
+                onPressed: _loadPlayersData,
+                icon: Icon(
+                  Icons.refresh,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _isLoadingPlayers
+                ? const Center(
+                    child: CircularProgressIndicator(),
+                  )
+                : _players.isEmpty
+                    ? _buildEmptyPlayersState()
+                    : _buildPlayersList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建空状态显示
+  /// 当没有球员数据时显示
+  Widget _buildEmptyPlayersState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.people_outlined,
+            size: 60,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '暂无球员信息',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '点击刷新按钮获取球员数据',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _loadPlayersData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color.fromARGB(255, 119, 34, 34),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('加载球员数据'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建球员列表
+  /// 显示球员详细信息列表
+  Widget _buildPlayersList() {
+    return ListView.builder(
+      itemCount: _players.length,
+      itemBuilder: (context, index) {
+        final player = _players[index];
+        return _buildPlayerCard(player);
+      },
+    );
+  }
+
+  /// 构建单个球员卡片
+  /// 显示球员的详细信息
+  Widget _buildPlayerCard(Map<String, dynamic> player) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // 球员头像
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(
+                color: Colors.grey.shade300,
+                width: 1,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(25),
+              child: Image.network(
+                player['avatar_url'] ?? '',
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 50,
+                    height: 50,
+                    color: Colors.grey.shade200,
+                    child: Icon(
+                      Icons.person,
+                      size: 30,
+                      color: Colors.grey.shade400,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 球员信息
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 姓名和号码
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        player['name'] ?? '未知',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(255, 119, 34, 34),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '#${player['jersey_number'] ?? '0'}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // 位置和国籍
+                Row(
+                  children: [
+                    Text(
+                      player['position'] ?? '未知位置',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (player['nationality_flag'] != null)
+                      Container(
+                        width: 20,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: Image.network(
+                            player['nationality_flag'],
+                            width: 20,
+                            height: 14,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 20,
+                                height: 14,
+                                color: Colors.grey.shade200,
+                                child: Icon(
+                                  Icons.flag,
+                                  size: 10,
+                                  color: Colors.grey.shade400,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // 统计数据
+                Row(
+                  children: [
+                    _buildStatItem('出场', player['appearances']?.toString() ?? '0'),
+                    const SizedBox(width: 16),
+                    _buildStatItem('进球', player['goals']?.toString() ?? '0'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建统计数据项
+  /// 显示单个统计数据
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 
