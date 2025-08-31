@@ -14,7 +14,7 @@ class HttpService {
   /// 发起GET请求
   /// [endpoint] 请求端点
   /// [params] 请求参数
-  Future<Map<String, dynamic>> get(String endpoint, {Map<String, dynamic>? params}) async {
+  Future<dynamic> get(String endpoint, {Map<String, dynamic>? params}) async {
     try {
       // 构建URL
       Uri uri = Uri.parse('$baseUrl$endpoint');

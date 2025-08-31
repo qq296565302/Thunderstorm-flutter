@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/sports_service.dart';
+import '../services/http_service.dart';
 import 'team_page.dart';
 
 /// 体育页面 - 足球赛事信息
@@ -49,11 +50,31 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   final Map<String, bool> _finishFlag = {}; // 各联赛是否为最后一页数据
   final Map<String, ScrollController> _scrollControllers = {}; // 各联赛的滚动控制器
   final Map<String, VoidCallback> _scrollListeners = {}; // 各联赛的滚动监听器引用
+  
+  // 积分数据状态管理
+  final Map<String, List<Map<String, dynamic>>> _rankingData = {}; // 各联赛的积分数据
+  final Map<String, bool> _isLoadingRanking = {}; // 各联赛积分的加载状态
 
   @override
   void initState() {
     super.initState();
     _primaryTabController = TabController(length: _primaryTabs.length, vsync: this);
+    
+    // 添加一级标签页切换监听，每次切换联赛都重新请求积分数据
+    _primaryTabController.addListener(() {
+      if (_primaryTabController.indexIsChanging) {
+        final currentLeague = _primaryTabs[_primaryTabController.index];
+        // 清空当前联赛的积分数据，强制重新加载
+        _rankingData[currentLeague] = [];
+        _isLoadingRanking[currentLeague] = false;
+        
+        // 如果当前联赛有积分标签页，立即加载积分数据
+        final secondaryTabs = _secondaryTabsConfig[currentLeague] ?? [];
+        if (secondaryTabs.contains('积分')) {
+          _loadRankingData(currentLeague);
+        }
+      }
+    });
     
     // 初始化二级TabController列表
     _secondaryTabControllers = _primaryTabs.map((tab) {
@@ -71,6 +92,10 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       _isLoadingData[league] = false;
       _hasMoreData[league] = true;
       _finishFlag[league] = false;
+      
+      // 初始化积分数据状态
+      _rankingData[league] = [];
+      _isLoadingRanking[league] = false;
       
       // 创建并保存滚动监听器引用
       final listener = () => _onScroll(league);
@@ -166,6 +191,64 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       _loadScheduleData(league, isLoadMore: true);
     }
   }
+  
+  /// 加载积分数据
+  /// 当切换联赛标签页时调用，每次都重新加载对应联赛的积分榜数据
+  Future<void> _loadRankingData(String leagueName) async {
+    if (_isLoadingRanking[leagueName] == true) {
+      return; // 正在加载中时不重复加载
+    }
+    
+    if (!mounted) return; // 检查组件是否仍然挂载
+    
+    setState(() {
+      _isLoadingRanking[leagueName] = true;
+    });
+    
+    try {
+      final response = await HttpService().get('/sport/team/rank', params: {
+        'leagueName': leagueName,
+      });
+  
+    print(response);
+      if (!mounted) return; // 异步操作完成后再次检查组件是否仍然挂载
+      
+      setState(() {
+        // 处理返回的数据结构: [{ "_id": "...", "league": "意甲", "table": [...] }]
+        // 需要从数组中找到对应联赛的数据，然后提取table字段
+        if (response is List && response.isNotEmpty) {
+          // 查找匹配的联赛数据
+          final leagueData = response.firstWhere(
+            (item) => item is Map<String, dynamic> && item['league'] == leagueName,
+            orElse: () => null,
+          );
+          
+          if (leagueData != null && leagueData is Map<String, dynamic> && leagueData.containsKey('table')) {
+            _rankingData[leagueName] = List<Map<String, dynamic>>.from(leagueData['table'] ?? []);
+          } else {
+            _rankingData[leagueName] = [];
+          }
+        } else if (response is Map<String, dynamic> && response.containsKey('table')) {
+          // 兼容单个对象的情况
+          _rankingData[leagueName] = List<Map<String, dynamic>>.from(response['table'] ?? []);
+        } else if (response is Map<String, dynamic> && response.containsKey('data')) {
+          // 兼容data字段的情况
+          _rankingData[leagueName] = List<Map<String, dynamic>>.from(response['data'] ?? []);
+        } else {
+          _rankingData[leagueName] = [];
+        }
+        _isLoadingRanking[leagueName] = false;
+      });
+    } catch (e) {
+      if (!mounted) return; // 异常处理时也要检查组件是否仍然挂载
+      
+      setState(() {
+        _isLoadingRanking[leagueName] = false;
+      });
+      // 可以在这里添加错误处理，比如显示错误提示
+      print('加载积分数据失败: $e');
+    }
+  }
 
   /// 构建一级Tab内容页面
   Widget _buildPrimaryTabContent(int primaryIndex) {
@@ -222,6 +305,11 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     // 如果是赛程Tab，显示赛程数据
     if (secondaryTab == '赛程' && SportsService().isLeagueSupported(primaryTab)) {
       return _buildSchedulePage(primaryTab);
+    }
+    
+    // 如果是积分Tab，显示积分数据
+    if (secondaryTab == '积分') {
+      return _buildRankingPage(primaryTab);
     }
     
     // 其他Tab显示占位符内容
@@ -765,5 +853,199 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       // 如果解析失败，默认返回false
       return false;
     }
+  }
+  
+  /// 构建积分页面
+  /// 显示联赛积分榜数据，数据通过标签页切换监听器加载
+  Widget _buildRankingPage(String leagueName) {
+    final rankings = _rankingData[leagueName] ?? [];
+    final isLoading = _isLoadingRanking[leagueName] ?? false;
+    
+    // 首次加载时显示加载指示器
+    if (rankings.isEmpty && isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
+        ),
+      );
+    }
+    
+    // 没有数据时显示空状态
+    if (rankings.isEmpty && !isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.leaderboard,
+              size: 60,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '暂无积分数据',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '当前没有可显示的积分榜',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                if (mounted) {
+                  _loadRankingData(leagueName);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromARGB(255, 119, 34, 34),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 显示积分表格
+    return Column(
+      children: [
+        // 表头
+        Container(
+          color: const Color.fromARGB(255, 119, 34, 34),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: const Row(
+            children: [
+              SizedBox(
+                width: 50,
+                child: Text(
+                  '排名',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '球队',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  '积分',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 积分列表
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(0),
+            itemCount: rankings.length,
+            itemBuilder: (context, index) {
+              final team = rankings[index];
+              return _buildRankingRow(team, index);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+  
+  /// 构建积分榜行
+  Widget _buildRankingRow(Map<String, dynamic> team, int index) {
+    final rank = team['rank']?.toString() ?? (index + 1).toString();
+    final teamName = team['team_name']?.toString() ?? '未知球队';
+    final points = team['points']?.toString() ?? '0';
+    
+    // 根据排名设置背景色
+    Color? backgroundColor;
+    if (index < 4) {
+      // 前4名（欧冠区）
+      backgroundColor = Colors.green.withValues(alpha: 0.1);
+    } else if (index < 6) {
+      // 5-6名（欧联区）
+      backgroundColor = Colors.blue.withValues(alpha: 0.1);
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.grey.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 排名
+          SizedBox(
+            width: 50,
+            child: Text(
+              rank,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          // 球队名称
+          Expanded(
+            child: Text(
+              teamName,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          // 积分
+          SizedBox(
+            width: 60,
+            child: Text(
+              points,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
