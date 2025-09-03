@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import '../services/sports_service.dart';
 import '../services/http_service.dart';
 import 'team_page.dart';
+import '../widgets/dynamic_tab.dart';
+import '../widgets/schedule_tab.dart';
+import '../widgets/ranking_tab.dart';
 
 /// 体育页面 - 足球赛事信息
 class SportsPage extends StatefulWidget {
@@ -42,66 +45,17 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     '深度': [], // 深度没有二级Tab
   };
   
-  // 赛程数据状态管理
-  final Map<String, List<MatchSchedule>> _scheduleData = {}; // 各联赛的赛程数据
-  final Map<String, String?> _nextDateData = {}; // 各联赛的nextDate
-  final Map<String, bool> _isLoadingData = {}; // 各联赛的加载状态
-  final Map<String, bool> _hasMoreData = {}; // 各联赛是否还有更多数据
-  final Map<String, bool> _finishFlag = {}; // 各联赛是否为最后一页数据
-  final Map<String, ScrollController> _scrollControllers = {}; // 各联赛的滚动控制器
-  final Map<String, VoidCallback> _scrollListeners = {}; // 各联赛的滚动监听器引用
-  
-  // 积分数据状态管理
-  final Map<String, List<Map<String, dynamic>>> _rankingData = {}; // 各联赛的积分数据
-  final Map<String, bool> _isLoadingRanking = {}; // 各联赛积分的加载状态
-
   @override
   void initState() {
     super.initState();
     _primaryTabController = TabController(length: _primaryTabs.length, vsync: this);
     
-    // 添加一级标签页切换监听，每次切换联赛都重新请求积分数据
-    _primaryTabController.addListener(() {
-      if (_primaryTabController.indexIsChanging) {
-        final currentLeague = _primaryTabs[_primaryTabController.index];
-        // 清空当前联赛的积分数据，强制重新加载
-        _rankingData[currentLeague] = [];
-        _isLoadingRanking[currentLeague] = false;
-        
-        // 如果当前联赛有积分标签页，立即加载积分数据
-        final secondaryTabs = _secondaryTabsConfig[currentLeague] ?? [];
-        if (secondaryTabs.contains('积分')) {
-          _loadRankingData(currentLeague);
-        }
-      }
-    });
-    
     // 初始化二级TabController列表
     _secondaryTabControllers = _primaryTabs.map((tab) {
       final secondaryTabs = _secondaryTabsConfig[tab] ?? [];
-      // 如果没有二级Tab，创建一个length为1的TabController作为占位
       final length = secondaryTabs.isEmpty ? 1 : secondaryTabs.length;
       return TabController(length: length, vsync: this);
     }).toList();
-    
-    // 初始化各联赛的滚动控制器和数据状态
-    for (String league in _primaryTabs) {
-      _scrollControllers[league] = ScrollController();
-      _scheduleData[league] = [];
-      _nextDateData[league] = null;
-      _isLoadingData[league] = false;
-      _hasMoreData[league] = true;
-      _finishFlag[league] = false;
-      
-      // 初始化积分数据状态
-      _rankingData[league] = [];
-      _isLoadingRanking[league] = false;
-      
-      // 创建并保存滚动监听器引用
-      final listener = () => _onScroll(league);
-      _scrollListeners[league] = listener;
-      _scrollControllers[league]!.addListener(listener);
-    }
   }
 
   @override
@@ -110,146 +64,9 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     for (var controller in _secondaryTabControllers) {
       controller.dispose();
     }
-    // 先移除滚动监听器，再释放滚动控制器
-    for (var entry in _scrollControllers.entries) {
-      final league = entry.key;
-      final controller = entry.value;
-      final listener = _scrollListeners[league];
-      
-      // 移除特定的监听器
-      if (listener != null) {
-        controller.removeListener(listener);
-      }
-      controller.dispose();
-    }
-    _scrollListeners.clear();
     super.dispose();
   }
   
-  /// 滚动监听方法
-  void _onScroll(String league) {
-    if (!mounted) return; // 检查组件是否仍然挂载
-    
-    final controller = _scrollControllers[league]!;
-    if (controller.position.pixels >= controller.position.maxScrollExtent - 200) {
-      // 距离底部200像素时开始加载更多数据
-      _loadMoreScheduleData(league);
-    }
-  }
-  
-  /// 加载赛程数据（首次加载或分页加载）
-  Future<void> _loadScheduleData(String league, {bool isLoadMore = false}) async {
-    if (_isLoadingData[league] == true || (!isLoadMore && (_scheduleData[league]?.isNotEmpty ?? false))) {
-      return; // 正在加载中或已有数据时不重复加载
-    }
-    
-    if (isLoadMore && _hasMoreData[league] == false) {
-      return; // 没有更多数据时不加载
-    }
-    
-    if (!mounted) return; // 检查组件是否仍然挂载
-    
-    setState(() {
-      _isLoadingData[league] = true;
-    });
-    
-    try {
-      final response = await SportsService().getLeagueSchedule(
-         league, 
-         start: isLoadMore ? (_nextDateData[league] ?? '') : ''
-       );
-      
-      if (!mounted) return; // 异步操作完成后再次检查组件是否仍然挂载
-      
-      setState(() {
-        if (isLoadMore) {
-          _scheduleData[league]?.addAll(response.matches);
-        } else {
-          _scheduleData[league] = response.matches;
-        }
-        _nextDateData[league] = response.nextDate;
-        // 如果nextDate为空字符串，表示没有更多数据了
-        final isFinished = response.nextDate == null || response.nextDate == '';
-        _finishFlag[league] = isFinished;
-        _hasMoreData[league] = !isFinished;
-        _isLoadingData[league] = false;
-      });
-    } catch (e) {
-      if (!mounted) return; // 异常处理时也要检查组件是否仍然挂载
-      
-      setState(() {
-        _isLoadingData[league] = false;
-      });
-      // 可以在这里添加错误处理，比如显示错误提示
-    }
-  }
-  
-  /// 加载更多数据
-  void _loadMoreScheduleData(String league) {
-    // 检查是否还有更多数据可以加载
-    if (_hasMoreData[league] == true) {
-      _loadScheduleData(league, isLoadMore: true);
-    }
-  }
-  
-  /// 加载积分数据
-  /// 当切换联赛标签页时调用，每次都重新加载对应联赛的积分榜数据
-  Future<void> _loadRankingData(String leagueName) async {
-    if (_isLoadingRanking[leagueName] == true) {
-      return; // 正在加载中时不重复加载
-    }
-    
-    if (!mounted) return; // 检查组件是否仍然挂载
-    
-    setState(() {
-      _isLoadingRanking[leagueName] = true;
-    });
-    
-    try {
-      final response = await HttpService().get('/sport/league/rank', params: {
-        'leagueName': leagueName,
-      });
-  
-    print(response);
-      if (!mounted) return; // 异步操作完成后再次检查组件是否仍然挂载
-      
-      setState(() {
-        // 处理返回的数据结构: [{ "_id": "...", "league": "意甲", "table": [...] }]
-        // 需要从数组中找到对应联赛的数据，然后提取table字段
-        if (response is List && response.isNotEmpty) {
-          // 查找匹配的联赛数据
-          final leagueData = response.firstWhere(
-            (item) => item is Map<String, dynamic> && item['league'] == leagueName,
-            orElse: () => null,
-          );
-          
-          if (leagueData != null && leagueData is Map<String, dynamic> && leagueData.containsKey('table')) {
-            _rankingData[leagueName] = List<Map<String, dynamic>>.from(leagueData['table'] ?? []);
-          } else {
-            _rankingData[leagueName] = [];
-          }
-        } else if (response is Map<String, dynamic> && response.containsKey('table')) {
-          // 兼容单个对象的情况
-          _rankingData[leagueName] = List<Map<String, dynamic>>.from(response['table'] ?? []);
-        } else if (response is Map<String, dynamic> && response.containsKey('data')) {
-          // 兼容data字段的情况
-          _rankingData[leagueName] = List<Map<String, dynamic>>.from(response['data'] ?? []);
-        } else {
-          _rankingData[leagueName] = [];
-        }
-        _isLoadingRanking[leagueName] = false;
-      });
-    } catch (e) {
-      if (!mounted) return; // 异常处理时也要检查组件是否仍然挂载
-      
-      setState(() {
-        _isLoadingRanking[leagueName] = false;
-      });
-      // 可以在这里添加错误处理，比如显示错误提示
-      print('加载积分数据失败: $e');
-    }
-  }
-
   /// 构建一级Tab内容页面
   Widget _buildPrimaryTabContent(int primaryIndex) {
     final primaryTabName = _primaryTabs[primaryIndex];
@@ -302,14 +119,16 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   
   /// 构建具体内容页面
   Widget _buildContentPage(String primaryTab, String secondaryTab) {
-    // 如果是赛程Tab，显示赛程数据
-    if (secondaryTab == '赛程' && SportsService().isLeagueSupported(primaryTab)) {
-      return _buildSchedulePage(primaryTab);
+    if (secondaryTab == '动态') {
+      return DynamicTab(leagueName: primaryTab);
     }
     
-    // 如果是积分Tab，显示积分数据
+    if (secondaryTab == '赛程' && SportsService().isLeagueSupported(primaryTab)) {
+      return ScheduleTab(leagueName: primaryTab);
+    }
+    
     if (secondaryTab == '积分') {
-      return _buildRankingPage(primaryTab);
+      return RankingTab(leagueName: primaryTab);
     }
     
     // 其他Tab显示占位符内容
@@ -320,10 +139,10 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-             Icons.sports_soccer,
-             size: 80,
-             color: Colors.orange.withValues(alpha: 0.7),
-           ),
+            Icons.sports_soccer,
+            size: 80,
+            color: Colors.orange.withOpacity(0.7),
+          ),
           const SizedBox(height: 20),
           Text(
             '$displayText 信息',
@@ -346,376 +165,6 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     );
   }
 
-  /// 构建赛程页面
-  Widget _buildSchedulePage(String leagueName) {
-    // 首次加载数据
-    if ((_scheduleData[leagueName]?.isEmpty ?? true) && _isLoadingData[leagueName] == false) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _loadScheduleData(leagueName);
-        }
-      });
-    }
-    
-    final matches = _scheduleData[leagueName] ?? [];
-    final isLoading = _isLoadingData[leagueName] ?? false;
-    
-    // 首次加载时显示加载指示器
-    if (matches.isEmpty && isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
-        ),
-      );
-    }
-    
-    // 没有数据时显示空状态
-    if (matches.isEmpty && !isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.event_busy,
-              size: 60,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '暂无赛程',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '当前没有可显示的比赛安排',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                if (mounted) {
-                  _loadScheduleData(leagueName);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 119, 34, 34),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      );
-    }
-    
-    // 显示赛程列表
-    final isFinished = _finishFlag[leagueName] ?? false;
-    return ListView.builder(
-      controller: _scrollControllers[leagueName],
-      padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 0), // 完全移除底部padding，让列表紧贴底部
-      itemCount: matches.length + (isLoading ? 1 : (isFinished ? 1 : 0)), // 加载时或已完成时多显示一个项目
-      itemBuilder: (context, index) {
-        if (index < matches.length) {
-          final match = matches[index];
-          return _buildMatchCard(match);
-        } else {
-          if (isLoading) {
-            // 显示底部加载指示器
-            return const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
-                ),
-              ),
-            );
-          } else if (isFinished) {
-            // 显示"没有更多赛程"提示
-            return _buildNoMoreDataWidget();
-          }
-          return const SizedBox.shrink();
-        }
-      },
-    );
-  }
-
-  /// 将格林尼治时间转换为北京时间，包含星期几信息
-  Map<String, String> _convertToBeijingTime(String gmtTimeString) {
-    try {
-      // 解析GMT时间字符串
-      DateTime gmtTime = DateTime.parse(gmtTimeString);
-      
-      // 转换为北京时间（UTC+8）
-      DateTime beijingTime = gmtTime.add(const Duration(hours: 8));
-      
-      // 星期几的中文映射
-      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      String weekday = weekdays[beijingTime.weekday - 1];
-      
-      // 格式化为易读的时间格式
-      String formattedTime = '${beijingTime.month.toString().padLeft(2, '0')}-${beijingTime.day.toString().padLeft(2, '0')} ${beijingTime.hour.toString().padLeft(2, '0')}:${beijingTime.minute.toString().padLeft(2, '0')}';
-      
-      return {
-        'time': formattedTime,
-        'weekday': weekday,
-      };
-    } catch (e) {
-      // 如果解析失败，返回原始字符串
-      return {
-        'time': gmtTimeString,
-        'weekday': '',
-      };
-    }
-  }
-
-  /// 构建比赛卡片
-  Widget _buildMatchCard(MatchSchedule match) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8), // 减少卡片间距，让列表更紧凑
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // 比赛时间和标题
-            Column(
-              children: [
-                // 比赛时间和星期几
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 119, 34, 34).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Builder(
-                    builder: (context) {
-                      final timeInfo = _convertToBeijingTime(match.startPlay);
-                      return Text(
-                        '${timeInfo['time']} ${timeInfo['weekday']}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color.fromARGB(255, 119, 34, 34),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                // 比赛标题
-                if (match.matchTitle != null && match.matchTitle!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    match.matchTitle!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // 对阵双方
-            Row(
-              children: [
-                // 主队
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      _navigateToTeamPage(
-                        context,
-                        match.teamAId ?? '',
-                        match.teamAName,
-                        match.teamALogo,
-                      );
-                    },
-                    child: Column(
-                      children: [
-                        // 主队logo
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(25),
-                            child: match.teamALogo.isNotEmpty
-                                ? Image.network(
-                                    match.teamALogo,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: Colors.grey[200],
-                                        child: const Icon(
-                                          Icons.sports_soccer,
-                                          color: Colors.grey,
-                                          size: 24,
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : Container(
-                                    color: Colors.grey[200],
-                                    child: const Icon(
-                                      Icons.sports_soccer,
-                                      color: Colors.grey,
-                                      size: 24,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // 主队名称
-                        Text(
-                          match.teamAName,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // VS和转播平台
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
-                      _isMatchInFuture(match.startPlay)
-                          ? const Icon(
-                              Icons.notifications_outlined,
-                              size: 20,
-                              color: Color.fromARGB(255, 119, 34, 34),
-                            )
-                          : const Text(
-                              'VS',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color.fromARGB(255, 119, 34, 34),
-                              ),
-                            ),
-                      // 转播平台
-                      if (match.tvList.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          match.tvList.join('、'),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                
-                // 客队
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      _navigateToTeamPage(
-                        context,
-                        match.teamBId ?? '',
-                        match.teamBName,
-                        match.teamBLogo,
-                      );
-                    },
-                    child: Column(
-                      children: [
-                        // 客队logo
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(25),
-                            child: match.teamBLogo.isNotEmpty
-                                ? Image.network(
-                                    match.teamBLogo,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: Colors.grey[200],
-                                        child: const Icon(
-                                          Icons.sports_soccer,
-                                          color: Colors.grey,
-                                          size: 24,
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : Container(
-                                    color: Colors.grey[200],
-                                    child: const Icon(
-                                      Icons.sports_soccer,
-                                      color: Colors.grey,
-                                      size: 24,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // 客队名称
-                        Text(
-                          match.teamBName,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -731,33 +180,33 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       ),
       body: SafeArea(
         top: false,
-        bottom: false, // 移除底部安全区域，让内容可以延伸到底部
+        bottom: false,
         child: Column(
           children: [
             // 一级Tab标签栏
             Container(
               color: const Color.fromARGB(255, 119, 34, 34),
               child: TabBar(
-              controller: _primaryTabController,
-              isScrollable: true,
-              indicatorColor: Colors.white,
-              indicatorWeight: 3,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              labelStyle: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                controller: _primaryTabController,
+                isScrollable: true,
+                indicatorColor: Colors.white,
+                indicatorWeight: 3,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                labelStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.normal,
+                ),
+                tabs: _primaryTabs.map((tab) => Tab(
+                  text: tab,
+                  height: 50,
+                )).toList(),
               ),
-              unselectedLabelStyle: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.normal,
-              ),
-              tabs: _primaryTabs.map((tab) => Tab(
-                text: tab,
-                height: 50,
-              )).toList(),
             ),
-          ),
             // 一级Tab内容区域（包含二级Tab）
             Expanded(
               child: TabBarView(
@@ -772,280 +221,6 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
       ),
     );
   }
-
-  /// 导航到球队页面
-  /// 传递球队ID、名称和logo信息
-  void _navigateToTeamPage(BuildContext context, String teamId, String teamName, String teamLogo) {
-    if (teamId.isEmpty) {
-      // 如果球队ID为空，显示提示信息
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('球队信息不完整，无法跳转'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => TeamPage(
-          teamId: teamId,
-          teamName: teamName,
-          teamLogo: teamLogo,
-        ),
-      ),
-    );
-  }
-
-  /// 构建"没有更多赛程"提示组件
-  Widget _buildNoMoreDataWidget() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
-      child: Row(
-        children: [
-          // 左侧分割线
-          Expanded(
-            child: Container(
-              height: 1,
-              color: Colors.grey[400],
-            ),
-          ),
-          // 中间文字
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              '没有更多赛程',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ),
-          // 右侧分割线
-          Expanded(
-            child: Container(
-              height: 1,
-              color: Colors.grey[400],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 判断比赛时间是否晚于当前时间
-  bool _isMatchInFuture(String gmtTimeString) {
-    try {
-      // 解析GMT时间字符串
-      DateTime gmtTime = DateTime.parse(gmtTimeString);
-      
-      // 转换为北京时间（UTC+8）
-      DateTime beijingTime = gmtTime.add(const Duration(hours: 8));
-      
-      // 获取当前北京时间
-      DateTime now = DateTime.now();
-      
-      // 比较时间
-      return beijingTime.isAfter(now);
-    } catch (e) {
-      // 如果解析失败，默认返回false
-      return false;
-    }
-  }
-  
-  /// 构建积分页面
-  /// 显示联赛积分榜数据，数据通过标签页切换监听器加载
-  Widget _buildRankingPage(String leagueName) {
-    final rankings = _rankingData[leagueName] ?? [];
-    final isLoading = _isLoadingRanking[leagueName] ?? false;
-    
-    // 首次加载时显示加载指示器
-    if (rankings.isEmpty && isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 119, 34, 34)),
-        ),
-      );
-    }
-    
-    // 没有数据时显示空状态
-    if (rankings.isEmpty && !isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.leaderboard,
-              size: 60,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '暂无积分数据',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '当前没有可显示的积分榜',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                if (mounted) {
-                  _loadRankingData(leagueName);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 119, 34, 34),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      );
-    }
-    
-    // 显示积分表格
-    return Column(
-      children: [
-        // 表头
-        Container(
-          color: const Color.fromARGB(255, 119, 34, 34),
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: const Row(
-            children: [
-              SizedBox(
-                width: 50,
-                child: Text(
-                  '排名',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  '球队',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              SizedBox(
-                width: 60,
-                child: Text(
-                  '积分',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 积分列表
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(0),
-            itemCount: rankings.length,
-            itemBuilder: (context, index) {
-              final team = rankings[index];
-              return _buildRankingRow(team, index);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-  
-  /// 构建积分榜行
-  Widget _buildRankingRow(Map<String, dynamic> team, int index) {
-    final rank = team['rank']?.toString() ?? (index + 1).toString();
-    final teamName = team['team_name']?.toString() ?? '未知球队';
-    final points = team['points']?.toString() ?? '0';
-    
-    // 根据排名设置背景色
-    Color? backgroundColor;
-    if (index < 4) {
-      // 前4名（欧冠区）
-      backgroundColor = Colors.green.withValues(alpha: 0.1);
-    } else if (index < 6) {
-      // 5-6名（欧联区）
-      backgroundColor = Colors.blue.withValues(alpha: 0.1);
-    }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.grey.withValues(alpha: 0.2),
-            width: 1,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // 排名
-          SizedBox(
-            width: 50,
-            child: Text(
-              rank,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          // 球队名称
-          Expanded(
-            child: Text(
-              teamName,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          // 积分
-          SizedBox(
-            width: 60,
-            child: Text(
-              points,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
+
+// 移除所有以下旧方法，因为它们已移到子组件中

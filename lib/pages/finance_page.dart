@@ -59,7 +59,7 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
   List<FinanceNews> _newsList = [];
   bool _isLoading = true;
   String? _errorMessage;
-  final Set<String> _expandedCards = <String>{}; // 记录展开的卡片唯一标识符
+  // 移除了展开卡片功能，因为现在内容自适应高度
   StreamSubscription<Map<String, dynamic>>? _financeNewsSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   
@@ -614,7 +614,6 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
 
   /// 构建新闻卡片
   Widget _buildNewsCard(FinanceNews news, int index) {
-    final isExpanded = _expandedCards.contains(news.uniqueId);
     
     Widget cardContent = Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -644,27 +643,14 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
                     fontWeight: FontWeight.w500,
                     height: 1.4,
                   ),
-                  maxLines: isExpanded ? null : 3,
-                  contextMenuBuilder: Platform.isAndroid 
+                  // 移除maxLines限制，让内容自适应高度
+                  contextMenuBuilder: kIsWeb ? null : (Platform.isAndroid 
                       ? (context, editableTextState) {
                           return _buildCustomContextMenu(context, editableTextState, news);
                         }
-                      : null,
+                      : null),
                 ),
-                // 透明的点击区域，用于展开功能
-                if (!isExpanded)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _expandedCards.add(news.uniqueId);
-                        });
-                      },
-                      child: Container(
-                        color: Colors.transparent,
-                      ),
-                    ),
-                  ),
+                // 由于移除了maxLines限制，不再需要展开功能的透明点击区域
               ],
             ),
             const SizedBox(height: 6),
