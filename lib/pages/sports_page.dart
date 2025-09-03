@@ -85,8 +85,16 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
           color: Colors.white,
           child: TabBar(
             controller: _secondaryTabControllers[primaryIndex],
-            indicatorColor: const Color.fromARGB(255, 119, 34, 34),
-            indicatorWeight: 2,
+            indicator: const UnderlineTabIndicator(
+              borderSide: BorderSide(
+                color: Color.fromARGB(255, 119, 34, 34),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(0),
+                bottomRight: Radius.circular(0),
+              ),
+            ),
             labelColor: const Color.fromARGB(255, 119, 34, 34),
             unselectedLabelColor: Colors.grey[600],
             labelStyle: const TextStyle(
@@ -189,8 +197,16 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
               child: TabBar(
                 controller: _primaryTabController,
                 isScrollable: true,
-                indicatorColor: Colors.white,
-                indicatorWeight: 3,
+                indicator: const UnderlineTabIndicator(
+                  borderSide: BorderSide(
+                    color: Colors.white,
+                    width: 3,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(0),
+                    bottomRight: Radius.circular(0),
+                  ),
+                ),
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
                 labelStyle: const TextStyle(
