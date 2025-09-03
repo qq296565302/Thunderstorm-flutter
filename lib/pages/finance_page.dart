@@ -8,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import '../models/finance_model.dart';
 import '../services/http_service.dart';
 import '../services/socket_manager.dart';
@@ -633,24 +635,37 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  if (!isExpanded) {
-                    _expandedCards.add(news.uniqueId);
-                  }
-                });
-              },
-              child: Text(
-                news.content.trim(), // 格式化内容：去掉开头和结尾的空格符
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  height: 1.4,
+            Stack(
+              children: [
+                SelectableText(
+                  news.content.trim(), // 格式化内容：去掉开头和结尾的空格符
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    height: 1.4,
+                  ),
+                  maxLines: isExpanded ? null : 3,
+                  contextMenuBuilder: Platform.isAndroid 
+                      ? (context, editableTextState) {
+                          return _buildCustomContextMenu(context, editableTextState, news);
+                        }
+                      : null,
                 ),
-                maxLines: isExpanded ? null : 3,
-                overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-              ),
+                // 透明的点击区域，用于展开功能
+                if (!isExpanded)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _expandedCards.add(news.uniqueId);
+                        });
+                      },
+                      child: Container(
+                        color: Colors.transparent,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 6),
             Row(
@@ -1292,5 +1307,44 @@ class _FinancePageState extends State<FinancePage> with WidgetsBindingObserver, 
     );
   }
 
+  /// 复制选中的文字到剪切板
+  Future<void> _copySelectedText(String selectedText) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: selectedText));
+      if (mounted) {
+        _showSuccessSnackBar('已复制到剪切板');
+      }
+      _logger.i('已复制文字到剪切板: ${selectedText.substring(0, selectedText.length > 20 ? 20 : selectedText.length)}...');
+    } catch (e) {
+      _logger.e('复制文字失败', error: e);
+      if (mounted) {
+        _showErrorSnackBar('复制失败');
+      }
+    }
+  }
 
+
+
+  /// 构建自定义上下文菜单
+  Widget _buildCustomContextMenu(BuildContext context, EditableTextState editableTextState, FinanceNews news) {
+    final selectedText = editableTextState.textEditingValue.selection.textInside(editableTextState.textEditingValue.text);
+    
+    if (selectedText.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: [
+        // 复制按钮 - 黑色背景，白色文字，带图标
+        ContextMenuButtonItem(
+          onPressed: () {
+            _copySelectedText(selectedText);
+            ContextMenuController.removeAny();
+          },
+          label: '📋 复制',
+        ),
+      ],
+    );
+  }
 }

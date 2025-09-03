@@ -206,7 +206,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     });
     
     try {
-      final response = await HttpService().get('/sport/team/rank', params: {
+      final response = await HttpService().get('/sport/league/rank', params: {
         'leagueName': leagueName,
       });
   

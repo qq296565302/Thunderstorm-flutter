@@ -205,4 +205,50 @@ class SportsService {
   bool isLeagueSupported(String leagueName) {
     return leagueIds.containsKey(leagueName);
   }
+
+  /// 获取指定联赛的积分榜数据
+  /// [leagueId] 联赛ID
+  Future<Map<String, dynamic>?> getRanking(String leagueId) async {
+    try {
+      // 这里可以根据实际API接口来实现积分榜数据获取
+      // 目前返回模拟数据结构
+      return {
+        'code': 200,
+        'data': {
+          'table': [
+            // 模拟积分榜数据
+            {
+              'rank': 1,
+              'team_name': '曼城',
+              'played': 20,
+              'wins': 15,
+              'draws': 3,
+              'losses': 2,
+              'points': 48
+            },
+            {
+              'rank': 2,
+              'team_name': '阿森纳',
+              'played': 20,
+              'wins': 14,
+              'draws': 4,
+              'losses': 2,
+              'points': 46
+            },
+            {
+              'rank': 3,
+              'team_name': '利物浦',
+              'played': 19,
+              'wins': 13,
+              'draws': 4,
+              'losses': 2,
+              'points': 43
+            }
+          ]
+        }
+      };
+    } catch (e) {
+      throw Exception('获取积分榜数据失败: $e');
+    }
+  }
 }
