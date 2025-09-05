@@ -18,7 +18,7 @@ class SportsPage extends StatefulWidget {
 class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
   late TabController _primaryTabController;
   late List<TabController> _secondaryTabControllers;
-  
+
   // 一级Tab标签列表
   final List<String> _primaryTabs = [
     'AC米兰',
@@ -29,9 +29,9 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     '欧冠',
     '欧联',
     '欧协联',
-    '深度'
+    '深度',
   ];
-  
+
   // 二级Tab配置
   final Map<String, List<String>> _secondaryTabsConfig = {
     'AC米兰': ['动态', '赛程'],
@@ -44,12 +44,15 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     '欧协联': ['动态', '赛程', '积分'],
     '深度': [], // 深度没有二级Tab
   };
-  
+
   @override
   void initState() {
     super.initState();
-    _primaryTabController = TabController(length: _primaryTabs.length, vsync: this);
-    
+    _primaryTabController = TabController(
+      length: _primaryTabs.length,
+      vsync: this,
+    );
+
     // 初始化二级TabController列表
     _secondaryTabControllers = _primaryTabs.map((tab) {
       final secondaryTabs = _secondaryTabsConfig[tab] ?? [];
@@ -66,17 +69,17 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
     }
     super.dispose();
   }
-  
+
   /// 构建一级Tab内容页面
   Widget _buildPrimaryTabContent(int primaryIndex) {
     final primaryTabName = _primaryTabs[primaryIndex];
     final secondaryTabs = _secondaryTabsConfig[primaryTabName] ?? [];
-    
+
     // 如果没有二级Tab（如"深度"），直接显示内容
     if (secondaryTabs.isEmpty) {
       return _buildContentPage(primaryTabName, '');
     }
-    
+
     // 有二级Tab的情况
     return Column(
       children: [
@@ -105,10 +108,9 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
               fontSize: 14,
               fontWeight: FontWeight.normal,
             ),
-            tabs: secondaryTabs.map((tab) => Tab(
-              text: tab,
-              height: 40,
-            )).toList(),
+            tabs: secondaryTabs
+                .map((tab) => Tab(text: tab, height: 40))
+                .toList(),
           ),
         ),
         // 二级Tab内容区域
@@ -116,32 +118,37 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
           child: TabBarView(
             controller: _secondaryTabControllers[primaryIndex],
             physics: const NeverScrollableScrollPhysics(),
-            children: secondaryTabs.map((secondaryTab) => 
-              _buildContentPage(primaryTabName, secondaryTab)
-            ).toList(),
+            children: secondaryTabs
+                .map(
+                  (secondaryTab) =>
+                      _buildContentPage(primaryTabName, secondaryTab),
+                )
+                .toList(),
           ),
         ),
       ],
     );
   }
-  
+
   /// 构建具体内容页面
   Widget _buildContentPage(String primaryTab, String secondaryTab) {
     if (secondaryTab == '动态') {
       return DynamicTab(leagueName: primaryTab);
     }
-    
+
     if (secondaryTab == '赛程' && SportsService().isLeagueSupported(primaryTab)) {
       return ScheduleTab(leagueName: primaryTab);
     }
-    
+
     if (secondaryTab == '积分') {
       return RankingTab(leagueName: primaryTab);
     }
-    
+
     // 其他Tab显示占位符内容
-    final displayText = secondaryTab.isEmpty ? primaryTab : '$primaryTab - $secondaryTab';
-    
+    final displayText = secondaryTab.isEmpty
+        ? primaryTab
+        : '$primaryTab - $secondaryTab';
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -163,10 +170,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
           const SizedBox(height: 10),
           Text(
             '敬请期待更多精彩内容',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -198,10 +202,7 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                 controller: _primaryTabController,
                 isScrollable: true,
                 indicator: const UnderlineTabIndicator(
-                  borderSide: BorderSide(
-                    color: Colors.white,
-                    width: 3,
-                  ),
+                  borderSide: BorderSide(color: Colors.white, width: 3),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(0),
                     bottomRight: Radius.circular(0),
@@ -217,18 +218,18 @@ class _SportsPageState extends State<SportsPage> with TickerProviderStateMixin {
                   fontSize: 16,
                   fontWeight: FontWeight.normal,
                 ),
-                tabs: _primaryTabs.map((tab) => Tab(
-                  text: tab,
-                  height: 50,
-                )).toList(),
+                tabs: _primaryTabs
+                    .map((tab) => Tab(text: tab, height: 50))
+                    .toList(),
               ),
             ),
             // 一级Tab内容区域（包含二级Tab）
             Expanded(
               child: TabBarView(
                 controller: _primaryTabController,
-                children: List.generate(_primaryTabs.length, (index) => 
-                  _buildPrimaryTabContent(index)
+                children: List.generate(
+                  _primaryTabs.length,
+                  (index) => _buildPrimaryTabContent(index),
                 ),
               ),
             ),
